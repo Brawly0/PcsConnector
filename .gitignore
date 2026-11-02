@@ -1,0 +1,22 @@
+# Added by Mission Control
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+dist/
+build/
+out/
+.next/
+.cache/
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+Thumbs.db
+desktop.ini
+.DS_Store
+.claude/worktrees/
