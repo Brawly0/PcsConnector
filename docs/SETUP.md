@@ -6,14 +6,14 @@ Steps marked **(untested)** are documented from the tools' standard usage and ha
 Put both machines on the same LAN (wired or 5 GHz Wi-Fi). Find the Windows IP with `ipconfig` and the Ubuntu IP with `ip a`. Allow inbound TCP 24800 (pcsc) on the Windows firewall when prompted.
 
 ## 1. Clipboard + file transfer (works today)
-1. Install Node.js 18+ on both (`winget install OpenJS.NodeJS.LTS`; Ubuntu: `sudo apt install nodejs npm` or nodesource).
-2. Ubuntu: `sudo apt install xclip` (X11) or `wl-clipboard` (Wayland). Check with `node bin/pcsc.js doctor`.
-3. Windows: `node bin/pcsc.js token` → copy secret. Then `node bin/pcsc.js host`.
-4. Ubuntu: `node bin/pcsc.js join <WINDOWS_IP> --token <SECRET>`.
+1. Run `./build.ps1` on Windows (needs Go). Copy `dist/pcsc-linux-amd64` to the laptop and `chmod +x` it.
+2. Ubuntu: `sudo apt install xclip` (X11) or `wl-clipboard` (Wayland). Check with `pcsc doctor`.
+3. Windows: `pcsc token` → copy secret. Then `pcsc host`.
+4. Ubuntu: `pcsc join <WINDOWS_IP> --token <SECRET>`.
 
 ## 2. Mouse + keyboard sharing (untested)
 Use a software KVM until the native version exists:
-- **Deskflow** or **Input Leap** (Synergy-family). Windows = server, Ubuntu = client. Place the Ubuntu screen to the right/left of the Windows screen in the layout grid.
+- **Deskflow** (github.com/deskflow/deskflow, actively maintained; Input Leap is archived). Windows = server, Ubuntu = client. Place the Ubuntu screen to the right/left of the Windows screen in the layout grid.
 - X11 is much better supported on Ubuntu than Wayland. On Ubuntu login screen choose "Ubuntu on Xorg" if the client can't inject input.
 - Turn off their clipboard sharing if you use `pcsc` for it, to avoid two tools fighting.
 

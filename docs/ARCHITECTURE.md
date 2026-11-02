@@ -11,18 +11,17 @@
  └───────────────────────┘                  └──────────────────────┘
 ```
 
-## Current code (Phase 1)
-- `src/protocol.js` – length-prefixed frames, AES-256-GCM, key = scrypt(token). Frame types: JSON control, binary file chunk.
-- `src/session.js` – one connection; `send`, `sendChunk` (with backpressure), events.
-- `src/clipboard.js` – text clipboard via PowerShell / xclip / wl-clipboard; polling with echo suppression.
-- `src/files.js` – Outbox watcher (waits for stable size) → chunked send → Sent; `Receiver` writes to Inbox (basename only, never overwrites).
-- `src/cli.js` – `token`, `host`, `join`, `doctor`. Client auto-reconnects every 3 s. Newest host connection wins.
+## Current code (Phase 1, Go)
+- `cmd/pcsc/protocol.go` – length-prefixed frames, AES-256-GCM, key = scrypt(token).
+- `cmd/pcsc/app.go` – connection lifecycle: serve / dial (auto-reconnect), message dispatch, newest connection wins.
+- `cmd/pcsc/clipboard*.go` – Windows: user32 syscalls + `GetClipboardSequenceNumber` (no polling cost); Linux: xclip / wl-clipboard polling.
+- `cmd/pcsc/files.go` – Outbox watcher (waits for stable size) -> chunked send -> Sent; receiver writes to Inbox (basename only, never overwrites).
 
-Zero npm dependencies on purpose: keeps it trivial to run on both OSes.
+Why Go: single static binary (~3.5 MB), ~9 MB RAM idle, no runtime on Ubuntu, cross-compiles Linux from Windows, and can call Win32 / uinput directly for the input phase.
 
 ## Roadmap
 1. **Phase 1 (done):** secure channel, clipboard text, folder-based file transfer.
-2. **Phase 2 – input:** reuse Deskflow/Input Leap first. Native replacement: capture mouse/keys on Windows (low-level hooks), send over the existing channel when the cursor crosses the screen edge, inject on Ubuntu via `uinput`/XTest. Needs a small native helper (Rust or C#) – Node alone can't do global hooks.
+2. **Phase 2 – input:** reuse Deskflow first (Input Leap is archived). Native replacement: capture mouse/keys on Windows (low-level hooks), send over the existing channel when the cursor crosses the screen edge, inject on Ubuntu via `uinput`/XTest. Needs a low-level keyboard/mouse hooks on Windows (`SetWindowsHookEx` via syscall) and `/dev/uinput` on Linux – both doable in Go without cgo.
 3. **Phase 3 – extended screen:** app-managed ffmpeg capture/stream of the virtual monitor, auto-start/stop with the session, resolution negotiation, hardware encoding. Optionally forward clicks made on the laptop's stream back to the virtual monitor.
 4. **Phase 4 – polish:** richer clipboard (images, files), drag-and-drop files, TLS/pairing instead of a pasted token, tray UI, installers.
 
