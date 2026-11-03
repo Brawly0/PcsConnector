@@ -15,6 +15,7 @@ import (
 )
 
 const usage = `pcsc - PcsConnector
+  pcsc                        open the app window (pairing, files, screen)
   pcsc token                  create/show the shared secret
   pcsc host [--port N]        run on the Windows PC
   pcsc join <ip> [--port N]   run on the Ubuntu laptop
@@ -43,7 +44,7 @@ func readConfigToken(d dirs) string {
 func main() {
 	log.SetFlags(log.Ltime)
 	if len(os.Args) < 2 {
-		fmt.Println(usage)
+		runUI(homeDirs(), 24800, true) // double-click: open the app window
 		return
 	}
 	cmd, args := os.Args[1], os.Args[2:]
@@ -75,6 +76,8 @@ func main() {
 	}
 
 	switch cmd {
+	case "ui":
+		runUI(d, *port, true)
 	case "token":
 		if tok == "" {
 			b := make([]byte, 18)

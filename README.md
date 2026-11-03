@@ -2,14 +2,15 @@
 
 Use an **Ubuntu laptop as an extended screen for a Windows PC**, with shared mouse/keyboard, clipboard and file transfer.
 
-Written in **Go**: one ~3.5 MB static binary per OS, ~9 MB RAM idle, nothing to install at runtime.
+Written in **Go**: one ~7 MB static binary per OS, ~10 MB RAM idle, nothing to install at runtime. The app window is a built-in local web page (no Electron).
 
 | Feature | How | Status |
 |---|---|---|
 | Clipboard sync (text) | `pcsc`, encrypted TCP; event-driven on Windows | ✅ working (Windows side verified) |
 | File transfer | `pcsc` – drop into `Outbox`, appears in peer's `Inbox` | ✅ working (loopback tested) |
 | Mouse + keyboard sharing | [Deskflow](https://github.com/deskflow/deskflow) now; native later | 📄 documented, not built |
-| Extended screen | Virtual display on Windows + ffmpeg stream to Ubuntu | 📄 documented, not built |
+| Extended screen | Virtual display on Windows + ffmpeg stream to Ubuntu, started from the app | 🧪 built, untested on real hardware |
+| App window | Pairing code, drag-and-drop files, clipboard toggle, screen start/stop | ✅ working |
 
 > Input Leap is archived (last release June 2025) – use Deskflow, which is actively maintained.
 
@@ -17,21 +18,17 @@ Docs: [setup](docs/SETUP.md) · [architecture & roadmap](docs/ARCHITECTURE.md)
 
 ## Quick start
 
-Build (needs Go; produces both binaries in `dist/`):
+Build (needs Go): `./build.ps1` → `dist/PcsConnector.exe` (Windows app) and `dist/pcsconnector-ubuntu.tar.gz` (Ubuntu bundle).
 
-```powershell
-./build.ps1
-```
+1. **Windows:** double-click `PcsConnector.exe` → "This is the Windows PC". It shows a pairing code and your PC's address. Allow it through the firewall if asked.
+2. **Ubuntu:** copy the tarball over, then
+   ```bash
+   tar xzf pcsconnector-ubuntu.tar.gz && bash pcsconnector-ubuntu/install.sh
+   ```
+   Open **PcsConnector** from the app menu → "This is the laptop" → enter the address + code.
+3. Done: clipboard syncs, drag files into the window to send them, and "Start extended screen" mirrors the virtual monitor to the laptop.
 
-Copy `dist/pcsc-linux-amd64` to the laptop (`chmod +x`). On Ubuntu install `xclip` (X11) or `wl-clipboard` (Wayland).
-
-```text
-Windows:  pcsc.exe token          # prints a shared secret
-          pcsc.exe host
-Ubuntu:   ./pcsc-linux-amd64 join <WINDOWS_IP> --token <SECRET>
-```
-
-Copy text on one machine, paste on the other. Drop files into `~/PcsConnector/Outbox` to send; they arrive in the other machine's `Inbox`. `pcsc doctor` checks needed tools. `go test ./...` runs the tests.
+CLI is still available (`pcsc host`, `pcsc join <ip> --token T`, `pcsc doctor`). `go test ./...` runs the tests. Full steps: [docs/SETUP.md](docs/SETUP.md).
 
 ## Security
 

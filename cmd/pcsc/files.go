@@ -77,7 +77,14 @@ func (r *receiver) abort() {
 // watchOutbox sends settled files (size unchanged between polls) one at a time, then moves them to Sent.
 func (a *app) watchOutbox() {
 	seen := map[string]int64{}
-	for range time.Tick(time.Second) {
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-a.done:
+			return
+		case <-tick.C:
+		}
 		s := a.current()
 		if s == nil {
 			continue

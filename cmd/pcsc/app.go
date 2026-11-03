@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,6 +19,7 @@ type msg struct {
 	Platform string `json:"platform,omitempty"`
 	Text     string `json:"text,omitempty"`
 	Size     int64  `json:"size,omitempty"`
+	Port     int    `json:"port,omitempty"`
 }
 
 func (s *session) send(m msg) error {
@@ -28,12 +30,20 @@ func (s *session) send(m msg) error {
 type dirs struct{ home, inbox, outbox, sent string }
 
 type app struct {
-	dirs   dirs
-	key    []byte
-	noClip bool
+	dirs dirs
+	key  []byte
 
-	mu  sync.Mutex
-	cur *session
+	clipOn atomic.Bool
+	done   chan struct{}
+	once   sync.Once
+
+	mu     sync.Mutex
+	ln     net.Listener
+	cur    *session
+	peer   *msg   // set once the peer's hello arrives
+	peerIP string // remote address of the current connection
+
+	scr screenState
 }
 
 func newApp(d dirs, token string, noClip bool) (*app, error) {
@@ -42,11 +52,36 @@ func newApp(d dirs, token string, noClip bool) (*app, error) {
 			return nil, err
 		}
 	}
-	a := &app{dirs: d, key: deriveKey(token), noClip: noClip}
+	a := &app{dirs: d, key: deriveKey(token), done: make(chan struct{})}
+	a.clipOn.Store(!noClip)
 	debug.FreeOSMemory() // hand scrypt's 16 MB scratch space back to the OS
 	go a.watchOutbox()
-	log.Printf("Inbox:  %s\nOutbox: %s (drop files here to send)", d.inbox, d.outbox)
 	return a, nil
+}
+
+func (a *app) stopped() bool {
+	select {
+	case <-a.done:
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *app) close() {
+	a.once.Do(func() {
+		close(a.done)
+		a.mu.Lock()
+		ln, cur := a.ln, a.cur
+		a.mu.Unlock()
+		if ln != nil {
+			ln.Close()
+		}
+		if cur != nil {
+			cur.close()
+		}
+		a.screenStop()
+	})
 }
 
 func (a *app) current() *session {
@@ -55,30 +90,46 @@ func (a *app) current() *session {
 	return a.cur
 }
 
+func (a *app) peerInfo() (*msg, string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.peer, a.peerIP
+}
+
 // serve accepts connections; the newest one replaces the previous.
 func (a *app) serve(port int) error {
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return err
 	}
-	log.Printf("hosting on port %d - waiting for the other machine...", port)
+	a.mu.Lock()
+	a.ln = ln
+	a.mu.Unlock()
+	log.Printf("Waiting for the other computer on port %d", port)
 	for {
 		c, err := ln.Accept()
 		if err != nil {
+			if a.stopped() {
+				return nil
+			}
 			return err
 		}
 		go a.handle(newSession(c, a.key))
 	}
 }
 
-// dial connects to the host and reconnects forever.
+// dial connects to the host and reconnects until the app is closed.
 func (a *app) dial(host string, port int) {
 	addr := net.JoinHostPort(host, fmt.Sprint(port))
-	for {
+	log.Printf("Connecting to %s ...", addr)
+	for !a.stopped() {
 		if c, err := net.DialTimeout("tcp", addr, 5*time.Second); err == nil {
 			a.handle(newSession(c, a.key))
 		}
-		time.Sleep(3 * time.Second)
+		select {
+		case <-a.done:
+		case <-time.After(3 * time.Second):
+		}
 	}
 }
 
@@ -86,6 +137,8 @@ func (a *app) handle(s *session) {
 	a.mu.Lock()
 	old := a.cur
 	a.cur = s
+	a.peer = nil
+	a.peerIP, _, _ = net.SplitHostPort(s.c.RemoteAddr().String())
 	a.mu.Unlock()
 	if old != nil {
 		old.close()
@@ -93,26 +146,29 @@ func (a *app) handle(s *session) {
 	defer func() {
 		a.mu.Lock()
 		if a.cur == s {
-			a.cur = nil
+			a.cur, a.peer = nil, nil
 		}
 		a.mu.Unlock()
 		s.close()
-		log.Print("disconnected")
+		a.screenStop()
+		if !a.stopped() {
+			log.Print("Disconnected")
+		}
 	}()
 
 	rx := &receiver{inbox: a.dirs.inbox}
 	defer rx.abort()
-	var clip *clipWatcher
-	if !a.noClip {
-		clip = startClipboard(func(t string) { s.send(msg{T: "clip", Text: t}) })
-		defer clip.stop()
-	}
+	clip := startClipboard(a.clipOn.Load, func(t string) { s.send(msg{T: "clip", Text: t}) })
+	defer clip.stop()
 	if s.send(msg{T: "hello", Name: hostname(), Platform: runtime.GOOS}) != nil {
 		return
 	}
 	for {
 		typ, payload, err := s.read()
 		if err != nil {
+			if err.Error() != "EOF" && !a.stopped() {
+				log.Printf("Connection problem: %v", err)
+			}
 			return
 		}
 		if typ == typChunk {
@@ -125,15 +181,20 @@ func (a *app) handle(s *session) {
 		}
 		switch m.T {
 		case "hello":
-			log.Printf("connected to %s (%s)", m.Name, m.Platform)
+			a.mu.Lock()
+			a.peer = &m
+			a.mu.Unlock()
+			log.Printf("Connected to %s (%s)", m.Name, m.Platform)
 		case "clip":
-			if clip != nil {
+			if a.clipOn.Load() {
 				clip.apply(m.Text)
 			}
 		case "file-start":
 			rx.start(m.Name)
 		case "file-end":
 			rx.end()
+		default:
+			a.screenMessage(s, m)
 		}
 	}
 }

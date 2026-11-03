@@ -5,11 +5,26 @@ Steps marked **(untested)** are documented from the tools' standard usage and ha
 ## 0. Network
 Put both machines on the same LAN (wired or 5 GHz Wi-Fi). Find the Windows IP with `ipconfig` and the Ubuntu IP with `ip a`. Allow inbound TCP 24800 (pcsc) on the Windows firewall when prompted.
 
-## 1. Clipboard + file transfer (works today)
-1. Run `./build.ps1` on Windows (needs Go). Copy `dist/pcsc-linux-amd64` to the laptop and `chmod +x` it.
-2. Ubuntu: `sudo apt install xclip` (X11) or `wl-clipboard` (Wayland). Check with `pcsc doctor`.
-3. Windows: `pcsc token` → copy secret. Then `pcsc host`.
-4. Ubuntu: `pcsc join <WINDOWS_IP> --token <SECRET>`.
+## 1. Install and connect (app window)
+**Windows PC**
+1. `./build.ps1` (needs Go) → `dist/PcsConnector.exe` and `dist/pcsconnector-ubuntu.tar.gz`.
+2. Double-click `PcsConnector.exe`; a browser window opens at `http://127.0.0.1:24801`.
+3. Click **This is the Windows PC**. Note the **pairing code** and the **address** (the 192.168.x.x one).
+4. Allow the Windows Firewall prompt (private networks). If it never appeared, run once as admin:
+   `netsh advfirewall firewall add rule name="PcsConnector" dir=in action=allow protocol=TCP localport=24800`
+
+**Ubuntu laptop**
+1. Copy `pcsconnector-ubuntu.tar.gz` over (USB stick, `scp user@laptop:` etc.).
+2. In a terminal: `tar xzf pcsconnector-ubuntu.tar.gz && bash pcsconnector-ubuntu/install.sh` (installs xclip/wl-clipboard + ffmpeg, adds a menu entry and login autostart).
+3. Open **PcsConnector** from the app menu (or run `~/.local/bin/pcsc`), click **This is the laptop**, enter the Windows address and the pairing code, press **Connect**.
+4. Both headers turn green: "Connected". It reconnects by itself after reboots.
+
+Clipboard sync is on by default (toggle in the window). Drag files into the window to send; they land in `~/PcsConnector/Inbox` on the other machine.
+
+**Extended screen (untested):** install a virtual display on Windows (section 3), install `ffmpeg` on Windows (`winget install Gyan.FFmpeg`), enter the virtual monitor's position/size in the app, press **Start extended screen**. The laptop opens it fullscreen; stop it from the Windows app.
+
+## 1b. CLI alternative
+`pcsc token` on Windows, `pcsc host`; on Ubuntu `pcsc join <WINDOWS_IP> --token <SECRET>`. `pcsc doctor` checks tools.
 
 ## 2. Mouse + keyboard sharing (untested)
 Use a software KVM until the native version exists:

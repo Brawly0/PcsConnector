@@ -17,7 +17,7 @@ type clipWatcher struct {
 	done   chan struct{}
 }
 
-func startClipboard(onChange func(string)) *clipWatcher {
+func startClipboard(enabled func() bool, onChange func(string)) *clipWatcher {
 	w := &clipWatcher{done: make(chan struct{})}
 	_, hasSeq := clipSeq()
 	interval := 700 * time.Millisecond
@@ -33,6 +33,12 @@ func startClipboard(onChange func(string)) *clipWatcher {
 			case <-w.done:
 				return
 			case <-t.C:
+			}
+			if !enabled() {
+				w.mu.Lock()
+				w.primed = false
+				w.mu.Unlock()
+				continue
 			}
 			if hasSeq {
 				s, _ := clipSeq()
