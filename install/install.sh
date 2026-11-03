@@ -10,6 +10,9 @@ echo "==> Installing helper tools (asks for your password once)"
 if [ -n "$WAYLAND_DISPLAY" ]; then clip="wl-clipboard"; else clip="xclip"; fi
 sudo apt-get update -qq
 sudo apt-get install -y "$clip" ffmpeg
+# the app window uses a Chromium-family browser in app mode; install one if none is present
+have=; for b in google-chrome chromium chromium-browser microsoft-edge; do command -v $b >/dev/null 2>&1 && have=1; done
+[ -n "$have" ] || sudo snap install chromium || true
 
 echo "==> Installing PcsConnector"
 mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.config/autostart"

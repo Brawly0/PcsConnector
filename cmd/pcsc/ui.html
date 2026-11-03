@@ -75,7 +75,7 @@ ol.steps{padding-left:20px;margin:6px 0}ol.steps li{margin:4px 0}
     <label class="f" for="jcode">Pairing code</label>
     <input type="text" id="jcode" placeholder="ABCDE-FGHJK" autocomplete="off" autocapitalize="characters">
     <div class="row" style="margin-top:16px">
-      <button class="b" id="jgo">Connect</button><button class="b ghost" id="jback">Back</button>
+      <button class="b" id="jgo">Connect</button>
     </div>
     <div class="err" id="jerr"></div>
   </div>
@@ -87,7 +87,7 @@ ol.steps{padding-left:20px;margin:6px 0}ol.steps li{margin:4px 0}
     <h2>Pairing</h2>
     <div id="pair-host">
       <div class="code" id="code">-----</div>
-      <p class="small mut" style="margin:12px 0 4px">On the laptop open PcsConnector, choose “This is the laptop”, and enter this code and one of these addresses:</p>
+      <p class="small mut" style="margin:12px 0 4px">On the laptop open PcsConnector and enter this address and code:</p>
       <div class="ips" id="ips"></div>
     </div>
     <div id="pair-join" class="hide"><span id="join-info"></span></div>
@@ -131,13 +131,13 @@ ol.steps{padding-left:20px;margin:6px 0}ol.steps li{margin:4px 0}
 <script>
 const $=id=>document.getElementById(id);
 const api=(p,o={})=>fetch('/api/'+p,{method:o.body!==undefined||o.post?'POST':'GET',headers:{'X-PCSC':'1'},body:o.body}).then(r=>r.json().catch(()=>({})));
-let S={},view='',picking=null;
+let S={},view='',picking=null,autoHosted=false;
 const show=v=>{if(v===view)return;view=v;for(const id of['choose','join','dash'])$('v-'+id).classList.toggle('hide',id!==v)};
 const fmt=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(0)+' KB':(n/1048576).toFixed(1)+' MB';
 
 function render(){
   const host=S.mode==='host';
-  if(!S.running){ if(picking==='join')show('join'); else show('choose'); setStat('Not set up','');return; }
+  if(!S.running){ if(S.platform==='windows'){ if(!autoHosted){autoHosted=true;api('host',{post:1}).then(poll)} setStat('Starting…','wait'); } else { show('join'); setStat('Not connected',''); } return; }
   show('dash');
   $('pair-host').classList.toggle('hide',!host);
   $('pair-join').classList.toggle('hide',host);
@@ -158,9 +158,6 @@ function setStat(t,k){$('stat').textContent=t;$('dot').className='dot '+k}
 async function poll(){try{S=await fetch('/api/state').then(r=>r.json());render()}catch(e){setStat('App closed','')}}
 setInterval(poll,1500);poll();
 
-$('optHost').onclick=async()=>{await api('host',{post:1});poll()};
-$('optJoin').onclick=()=>{picking='join';render()};
-$('jback').onclick=()=>{picking=null;render()};
 $('jgo').onclick=async()=>{
   const r=await api('join',{body:JSON.stringify({IP:$('jip').value,Code:$('jcode').value})});
   $('jerr').textContent=r.error||'';if(!r.error){picking=null;poll()}};

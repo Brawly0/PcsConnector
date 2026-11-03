@@ -322,7 +322,7 @@ func runUI(d dirs, port int, open bool) {
 	if err != nil {
 		// already running: just show the existing window
 		if open {
-			openBrowser("http://" + uiAddr)
+			openApp("http://" + uiAddr)
 		}
 		return
 	}
@@ -332,7 +332,7 @@ func runUI(d dirs, port int, open bool) {
 		}
 	}
 	if open {
-		openBrowser("http://" + uiAddr)
+		openApp("http://" + uiAddr)
 	}
 	log.Printf("PcsConnector is open at http://%s", uiAddr)
 	log.Fatal(http.Serve(ln, u.handler()))
