@@ -19,7 +19,8 @@ type msg struct {
 	Platform string `json:"platform,omitempty"`
 	Text     string `json:"text,omitempty"`
 	Size     int64  `json:"size,omitempty"`
-	Port     int    `json:"port,omitempty"`
+	W        int    `json:"w,omitempty"`
+	H        int    `json:"h,omitempty"`
 }
 
 func (s *session) send(m msg) error {
@@ -170,6 +171,10 @@ func (a *app) handle(s *session) {
 				log.Printf("Connection problem: %v", err)
 			}
 			return
+		}
+		if typ == typFrame {
+			a.screenFrame(payload)
+			continue
 		}
 		if typ == typChunk {
 			rx.chunk(payload)

@@ -21,6 +21,7 @@ import (
 const (
 	typJSON  byte = 0
 	typChunk byte = 1
+	typFrame byte = 2 // JPEG screen frame
 	maxFrame      = 4 << 20
 )
 

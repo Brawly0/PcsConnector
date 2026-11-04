@@ -25,3 +25,19 @@ func openApp(url string) {
 	}
 	exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 }
+
+// openAppFull shows url in a fullscreen app window.
+func openAppFull(url string) {
+	for _, p := range []string{
+		os.Getenv("ProgramFiles(x86)") + `\Microsoft\Edge\Application\msedge.exe`,
+		os.Getenv("ProgramFiles") + `\Microsoft\Edge\Application\msedge.exe`,
+		os.Getenv("ProgramFiles") + `\Google\Chrome\Application\chrome.exe`,
+	} {
+		if _, err := os.Stat(p); err == nil {
+			if exec.Command(p, "--app="+url, "--start-fullscreen").Start() == nil {
+				return
+			}
+		}
+	}
+	exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+}

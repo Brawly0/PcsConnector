@@ -109,16 +109,10 @@ ol.steps{padding-left:20px;margin:6px 0}ol.steps li{margin:4px 0}
   <div class="card" id="c-screen">
     <h2>Extended screen</h2>
     <div id="scr-host">
-      <p class="small mut" style="margin-top:0">Needs a virtual monitor on Windows (see the guide) and <code>ffmpeg</code>. Set where that monitor sits in Windows display settings.</p>
-      <div class="row">
-        <div style="flex:1;min-width:90px"><label class="f">Left offset (x)</label><input type="number" id="sx" value="1920"></div>
-        <div style="flex:1;min-width:90px"><label class="f">Top offset (y)</label><input type="number" id="sy" value="0"></div>
-        <div style="flex:1;min-width:90px"><label class="f">Width</label><input type="number" id="sw" value="1920"></div>
-        <div style="flex:1;min-width:90px"><label class="f">Height</label><input type="number" id="sh" value="1080"></div>
-      </div>
+      <p class="small mut" style="margin-top:0" id="scr-hint">Turns the laptop into a second monitor for this PC.</p>
       <div class="row" style="margin-top:14px"><button class="b" id="scrBtn">Start extended screen</button><span class="err" id="serr"></span></div>
     </div>
-    <p id="scr-join" class="small mut hide" style="margin:0">Start it from the Windows PC. The laptop opens the screen fullscreen automatically (needs <code>ffmpeg</code>: <code>sudo apt install ffmpeg</code>).</p>
+    <p id="scr-join" class="small mut hide" style="margin:0">Start it from the Windows PC. The laptop opens the screen fullscreen automatically.</p>
   </div>
 
   <div class="card">
@@ -148,7 +142,8 @@ function render(){
   if(S.connected) setStat('Connected to '+S.peer.name+' ('+S.peer.ip+')','ok');
   else setStat(host?'Waiting for the laptop…':'Connecting…','wait');
   if(document.activeElement!==$('clip'))$('clip').checked=!!S.clip;
-  const on=!!S.screen;$('scrBtn').textContent=on?'Stop extended screen':'Start extended screen';$('scrBtn').dataset.on=on?1:0;$('scrBtn').disabled=!S.connected;
+  const vm=S.vmon&&S.vmon.installed,on=!!S.screen;$('scrBtn').textContent=vm?(on?'Stop extended screen':'Start extended screen'):'Set up virtual monitor';$('scrBtn').dataset.on=on?1:0;$('scrBtn').dataset.vm=vm?1:0;$('scrBtn').disabled=!S.connected&&vm;
+  $('scr-hint').textContent=vm?'Drag windows onto the new monitor in Windows. Arrange it in Settings > Display.':'One click installs the virtual monitor (Windows asks permission once).';
   const li=(a)=>(a||[]).map(f=>'<li><span>'+esc(f.name)+'</span><span class="mut">'+fmt(f.size)+'</span></li>').join('');
   $('inbox').innerHTML=li(S.inbox);
   $('log').textContent=(S.log||[]).join('\n');
@@ -165,9 +160,10 @@ $('unpair').onclick=async()=>{if(confirm('Disconnect and forget this pairing?'))
 $('clip').onchange=e=>api('clip?on='+(e.target.checked?1:0),{post:1});
 $('openIn').onclick=()=>api('open?dir=inbox',{post:1});
 $('scrBtn').onclick=async e=>{
-  $('serr').textContent='';
-  if(e.target.dataset.on==='1'){await api('screen?on=0',{post:1});poll();return}
-  const r=await api('screen?on=1',{body:JSON.stringify({X:+$('sx').value,Y:+$('sy').value,W:+$('sw').value,H:+$('sh').value})});
+  const bt=e.target;$('serr').textContent='';
+  if(bt.dataset.vm!=='1'){bt.disabled=true;bt.textContent='Installing…';const r=await api('vmon/install',{post:1});$('serr').textContent=r.error||'';poll();return}
+  if(bt.dataset.on==='1'){await api('screen?on=0',{post:1});poll();return}
+  const r=await api('screen?on=1',{post:1});
   $('serr').textContent=r.error||'';poll()};
 
 async function sendFiles(fs){for(const f of fs){await fetch('/api/send?name='+encodeURIComponent(f.name),{method:'POST',headers:{'X-PCSC':'1'},body:f})}

@@ -15,13 +15,13 @@ Put both machines on the same LAN (wired or 5 GHz Wi-Fi). Find the Windows IP wi
 
 **Ubuntu laptop**
 1. Copy `pcsconnector-ubuntu.tar.gz` over (USB stick, `scp user@laptop:` etc.).
-2. In a terminal: `tar xzf pcsconnector-ubuntu.tar.gz && bash pcsconnector-ubuntu/install.sh` (installs xclip/wl-clipboard + ffmpeg, adds a menu entry and login autostart).
+2. In a terminal: `tar xzf pcsconnector-ubuntu.tar.gz && bash pcsconnector-ubuntu/install.sh` (installs xclip/wl-clipboard, adds a menu entry and login autostart).
 3. Open **PcsConnector** from the app menu (or run `~/.local/bin/pcsc`), click **This is the laptop**, enter the Windows address and the pairing code, press **Connect**.
 4. Both headers turn green: "Connected". It reconnects by itself after reboots.
 
 Clipboard sync is on by default (toggle in the window). Drag files into the window to send; they land in `~/PcsConnector/Inbox` on the other machine.
 
-**Extended screen (untested):** install a virtual display on Windows (section 3), install `ffmpeg` on Windows (`winget install Gyan.FFmpeg`), enter the virtual monitor's position/size in the app, press **Start extended screen**. The laptop opens it fullscreen; stop it from the Windows app.
+**Extended screen (untested):** on the Windows app press **Set up virtual monitor** (one Windows permission prompt; installs a bundled, signed virtual display driver), then **Start extended screen**. The laptop opens it fullscreen. No ffmpeg or other downloads.
 
 ## 1b. CLI alternative
 `pcsc token` on Windows, `pcsc host`; on Ubuntu `pcsc join <WINDOWS_IP> --token <SECRET>`. `pcsc doctor` checks tools.
@@ -33,22 +33,11 @@ Use a software KVM until the native version exists:
 - Turn off their clipboard sharing if you use `pcsc` for it, to avoid two tools fighting.
 
 ## 3. Extended screen (untested)
-Windows needs a second (virtual) monitor to extend onto, since the laptop is not physically attached.
-1. Install a virtual display driver, e.g. **Virtual-Display-Driver** (IddCx, github.com/itsmikethetech/Virtual-Display-Driver). In *Settings → Display*, set it to *Extend*, 1920x1080, and arrange it beside your main monitor. Note its top-left offset (e.g. main is 1920 wide → virtual starts at x=1920).
-2. Windows – capture that region and stream it:
-   ```
-   ffmpeg -f gdigrab -framerate 30 -offset_x 1920 -offset_y 0 -video_size 1920x1080 -i desktop ^
-     -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p ^
-     -f mpegts "udp://<UBUNTU_IP>:5000?pkt_size=1316"
-   ```
-   (Use `h264_nvenc` / `h264_qsv` instead of `libx264` if you have a GPU encoder – lower CPU, lower latency.)
-3. Ubuntu – play fullscreen:
-   ```
-   ffplay -fflags nobuffer -flags low_delay -framedrop -probesize 32 -analyzeduration 0 -fs udp://0.0.0.0:5000
-   ```
-4. With step 2 running, move the mouse off the edge of the Windows screen onto the virtual monitor — it shows up on the laptop, and the KVM tool from section 2 handles input only for the *laptop's own* screen. To click windows shown in the stream, you move the Windows mouse onto the virtual monitor region (requires the Phase 3 input forwarding below to feel seamless).
+The app does this itself. **Set up virtual monitor** installs the bundled Virtual-Display-Driver (IddCx, signed, ~400 KB) via Windows SetupAPI; the app finds the monitor automatically. **Start extended screen** captures it (GDI) and streams JPEG frames over the encrypted channel to the laptop, which shows them fullscreen in an app window (double-click toggles fullscreen). In *Settings > Display* you can arrange the new monitor beside your main one.
 
-Expect ~100–200 ms latency with this approach; good for documents/chat/reference, not games.
+Manual fallback if the one-click install fails: install Virtual-Display-Driver yourself, then press Start. Send the Activity log if it still fails.
+
+Expect roughly 100-200 ms latency; fine for documents, chat and reference, not games. Clicks on the laptop are not forwarded to Windows yet (see Phase 3).
 
 ## Troubleshooting
 - `join` never connects → firewall, wrong IP, or different token (wrong token silently drops the connection).

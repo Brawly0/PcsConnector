@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net"
 	"net/http"
+	"net/textproto"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +25,9 @@ import (
 
 //go:embed ui.html
 var uiHTML []byte
+
+//go:embed viewer.html
+var viewerHTML []byte
 
 const uiAddr = "127.0.0.1:24801"
 
@@ -173,7 +178,7 @@ func (u *ui) state() map[string]any {
 	st := map[string]any{
 		"mode": cfg.Mode, "host": cfg.Host, "code": cfg.Token, "ips": localIPs(), "platform": runtime.GOOS,
 		"running": a != nil, "connected": false, "port": u.port, "log": u.ring.get(),
-		"inbox": listDir(u.d.inbox), "sent": listDir(u.d.sent), "dir": u.d.home,
+		"vmon": vmonStatus(), "inbox": listDir(u.d.inbox), "sent": listDir(u.d.sent), "dir": u.d.home,
 	}
 	if a != nil {
 		peer, ip := a.peerInfo()
@@ -259,9 +264,46 @@ func (u *ui) handler() http.Handler {
 			reply(w, nil)
 			return
 		}
-		var o screenOpts
-		json.NewDecoder(r.Body).Decode(&o)
-		reply(w, a.screenStart(o))
+		reply(w, a.screenStart())
+	})
+	mux.HandleFunc("/screen", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(viewerHTML)
+	})
+	mux.HandleFunc("/api/stream", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		a := u.a
+		u.mu.Unlock()
+		if a == nil {
+			http.Error(w, "not running", 400)
+			return
+		}
+		mw := multipart.NewWriter(w)
+		w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+mw.Boundary())
+		w.Header().Set("Cache-Control", "no-store")
+		fl, _ := w.(http.Flusher)
+		seq := 0
+		for r.Context().Err() == nil {
+			jpg, n, live := a.frame(seq, 5*time.Second)
+			if !live {
+				return
+			}
+			if jpg == nil {
+				continue
+			}
+			seq = n
+			p, err := mw.CreatePart(textproto.MIMEHeader{"Content-Type": {"image/jpeg"}, "Content-Length": {fmt.Sprint(len(jpg))}})
+			if err != nil {
+				return
+			}
+			p.Write(jpg)
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+	})
+	mux.HandleFunc("/api/vmon/install", func(w http.ResponseWriter, r *http.Request) {
+		reply(w, installDisplay())
 	})
 	mux.HandleFunc("/api/send", func(w http.ResponseWriter, r *http.Request) {
 		name := filepath.Base(r.URL.Query().Get("name"))

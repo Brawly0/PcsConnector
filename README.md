@@ -9,7 +9,7 @@ Written in **Go**: one ~7 MB static binary per OS, ~10 MB RAM idle, nothing to i
 | Clipboard sync (text) | `pcsc`, encrypted TCP; event-driven on Windows | ✅ working (Windows side verified) |
 | File transfer | `pcsc` – drop into `Outbox`, appears in peer's `Inbox` | ✅ working (loopback tested) |
 | Mouse + keyboard sharing | [Deskflow](https://github.com/deskflow/deskflow) now; native later | 📄 documented, not built |
-| Extended screen | Virtual display on Windows + ffmpeg stream to Ubuntu, started from the app | 🧪 built, untested on real hardware |
+| Extended screen | Built-in: one-click virtual monitor + JPEG stream to Ubuntu, no ffmpeg | 🧪 built, untested on real hardware |
 | App window | Pairing code, drag-and-drop files, clipboard toggle, screen start/stop | ✅ working |
 
 > Input Leap is archived (last release June 2025) – use Deskflow, which is actively maintained.
@@ -26,7 +26,7 @@ Build (needs Go): `./build.ps1` → `dist/PcsConnector.exe` (Windows app) and `d
    tar xzf pcsconnector-ubuntu.tar.gz && bash pcsconnector-ubuntu/install.sh
    ```
    Open **PcsConnector** from the app menu → "This is the laptop" → enter the address + code.
-3. Done: clipboard syncs, drag files into the window to send them, and "Start extended screen" mirrors the virtual monitor to the laptop.
+3. Done: clipboard syncs, drag files into the window to send them, and press "Set up virtual monitor" once, then "Start extended screen" shows it on the laptop.
 
 CLI is still available (`pcsc host`, `pcsc join <ip> --token T`, `pcsc doctor`). `go test ./...` runs the tests. Full steps: [docs/SETUP.md](docs/SETUP.md).
 

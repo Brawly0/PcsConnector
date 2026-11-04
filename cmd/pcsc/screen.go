@@ -1,26 +1,28 @@
 package main
 
-// Extended screen: the Windows side runs ffmpeg (gdigrab -> H.264 -> UDP) and
-// the Ubuntu side runs ffplay fullscreen. Both are started/stopped over the channel.
+// Extended screen, built in: the Windows side captures the virtual monitor with GDI, encodes JPEG
+// and streams frames over the encrypted channel; the laptop shows them fullscreen in an app window.
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"log"
-	"os/exec"
 	"runtime"
 	"sync"
+	"time"
 )
 
-const screenPort = 5000
-
 type screenState struct {
-	mu  sync.Mutex
-	cmd *exec.Cmd
-	on  bool
-}
-
-type screenOpts struct {
-	X, Y, W, H, FPS int
+	mu      sync.Mutex
+	stop    chan struct{} // host: closes to stop capturing
+	on      bool          // host: capturing, viewer: showing
+	jpg     []byte        // viewer: latest frame
+	seq     int
+	wait    chan struct{} // closed and replaced whenever jpg/on changes
+	w, h    int
+	viewing bool
 }
 
 func (a *app) screenOn() bool {
@@ -29,71 +31,129 @@ func (a *app) screenOn() bool {
 	return a.scr.on
 }
 
-func (a *app) screenStop() {
-	a.scr.mu.Lock()
-	c := a.scr.cmd
-	a.scr.cmd, a.scr.on = nil, false
-	a.scr.mu.Unlock()
-	if c != nil && c.Process != nil {
-		c.Process.Kill()
-		c.Wait()
+// notify must be called with mu held.
+func (st *screenState) notify() {
+	if st.wait != nil {
+		close(st.wait)
 	}
+	st.wait = make(chan struct{})
 }
 
-func (a *app) screenRun(c *exec.Cmd) error {
-	a.screenStop()
-	if err := c.Start(); err != nil {
-		return err
+func (a *app) screenStop() {
+	st := &a.scr
+	st.mu.Lock()
+	if st.stop != nil {
+		close(st.stop)
+		st.stop = nil
 	}
-	a.scr.mu.Lock()
-	a.scr.cmd, a.scr.on = c, true
-	a.scr.mu.Unlock()
-	go func() {
-		c.Wait()
-		a.scr.mu.Lock()
-		if a.scr.cmd == c {
-			a.scr.cmd, a.scr.on = nil, false
+	st.on, st.viewing, st.jpg = false, false, nil
+	st.notify()
+	st.mu.Unlock()
+}
+
+// frame blocks until a frame newer than seq exists (or the stream ended / timeout).
+func (a *app) frame(seq int, timeout time.Duration) (jpg []byte, next int, live bool) {
+	st := &a.scr
+	deadline := time.After(timeout)
+	for {
+		st.mu.Lock()
+		if st.wait == nil {
+			st.wait = make(chan struct{})
 		}
-		a.scr.mu.Unlock()
-	}()
-	return nil
+		w := st.wait
+		if !st.viewing {
+			st.mu.Unlock()
+			return nil, seq, false
+		}
+		if st.seq != seq && st.jpg != nil {
+			j, n := st.jpg, st.seq
+			st.mu.Unlock()
+			return j, n, true
+		}
+		st.mu.Unlock()
+		select {
+		case <-w:
+		case <-deadline:
+			return nil, seq, true
+		case <-a.done:
+			return nil, seq, false
+		}
+	}
 }
 
 // screenStart is called on the Windows host.
-func (a *app) screenStart(o screenOpts) error {
+func (a *app) screenStart() error {
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("the screen is shared from the Windows PC")
 	}
 	s := a.current()
-	_, ip := a.peerInfo()
-	if s == nil || ip == "" {
+	if s == nil {
 		return fmt.Errorf("connect the laptop first")
 	}
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return fmt.Errorf("ffmpeg not found - install it with: winget install Gyan.FFmpeg")
+	m, ok := virtualMonitor()
+	if !ok {
+		return fmt.Errorf("no virtual monitor yet - press \"Set up virtual monitor\" first")
 	}
-	if o.W <= 0 {
-		o.W = 1920
-	}
-	if o.H <= 0 {
-		o.H = 1080
-	}
-	if o.FPS <= 0 {
-		o.FPS = 30
-	}
-	if err := s.send(msg{T: "screen-start", Port: screenPort}); err != nil {
+	a.screenStop()
+	if err := s.send(msg{T: "screen-start", W: m.W, H: m.H}); err != nil {
 		return err
 	}
-	c := exec.Command("ffmpeg", "-loglevel", "error", "-f", "gdigrab", "-framerate", fmt.Sprint(o.FPS),
-		"-offset_x", fmt.Sprint(o.X), "-offset_y", fmt.Sprint(o.Y), "-video_size", fmt.Sprintf("%dx%d", o.W, o.H),
-		"-i", "desktop", "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-pix_fmt", "yuv420p",
-		"-f", "mpegts", fmt.Sprintf("udp://%s:%d?pkt_size=1316", ip, screenPort))
-	hideWindow(c)
-	if err := a.screenRun(c); err != nil {
-		return err
-	}
-	log.Print("Extended screen started")
+	stop := make(chan struct{})
+	a.scr.mu.Lock()
+	a.scr.stop, a.scr.on = stop, true
+	a.scr.mu.Unlock()
+	go a.captureLoop(s, m, stop)
+	log.Printf("Extended screen started (%dx%d at %d,%d)", m.W, m.H, m.X, m.Y)
 	return nil
+}
+
+func (a *app) captureLoop(s *session, m monitor, stop chan struct{}) {
+	defer func() {
+		a.scr.mu.Lock()
+		if a.scr.stop == stop {
+			a.scr.stop, a.scr.on = nil, false
+		}
+		a.scr.mu.Unlock()
+	}()
+	g, err := newGrabber(m.X, m.Y, m.W, m.H)
+	if err != nil {
+		log.Printf("Cannot capture the screen: %v", err)
+		return
+	}
+	defer g.close()
+	buf, prev := make([]byte, m.W*m.H*4), make([]byte, m.W*m.H*4)
+	img := image.NewRGBA(image.Rect(0, 0, m.W, m.H))
+	var out bytes.Buffer
+	var last time.Time
+	tick := time.NewTicker(40 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-a.done:
+			return
+		case <-tick.C:
+		}
+		if !g.grab(buf) {
+			continue
+		}
+		if bytes.Equal(buf, prev) && time.Since(last) < 2*time.Second {
+			continue
+		}
+		for i := 0; i+3 < len(buf); i += 4 {
+			img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = buf[i+2], buf[i+1], buf[i], 255
+		}
+		out.Reset()
+		if jpeg.Encode(&out, img, &jpeg.Options{Quality: 70}) != nil {
+			continue
+		}
+		if err := s.write(typFrame, out.Bytes()); err != nil {
+			return
+		}
+		last = time.Now()
+		buf, prev = prev, buf
+	}
 }
 
 func (a *app) screenEnd() {
@@ -103,19 +163,32 @@ func (a *app) screenEnd() {
 	}
 }
 
-// screenMessage handles screen messages on the receiving side (Ubuntu).
+// screenFrame stores an incoming JPEG on the viewing side.
+func (a *app) screenFrame(p []byte) {
+	st := &a.scr
+	st.mu.Lock()
+	if st.viewing {
+		st.jpg = append(st.jpg[:0:0], p...)
+		st.seq++
+		st.notify()
+	}
+	st.mu.Unlock()
+}
+
+// screenMessage handles screen messages on the receiving side (the laptop).
 func (a *app) screenMessage(s *session, m msg) {
 	switch m.T {
 	case "screen-start":
 		if runtime.GOOS == "windows" {
 			return
 		}
-		c := exec.Command("ffplay", "-loglevel", "error", "-fflags", "nobuffer", "-flags", "low_delay", "-framedrop",
-			"-probesize", "32", "-analyzeduration", "0", "-fs", "-window_title", "PcsConnector screen",
-			fmt.Sprintf("udp://0.0.0.0:%d", m.Port))
-		if err := a.screenRun(c); err != nil {
-			log.Printf("cannot start ffplay (sudo apt install ffmpeg): %v", err)
-			return
+		a.scr.mu.Lock()
+		already := a.scr.viewing
+		a.scr.viewing, a.scr.on, a.scr.w, a.scr.h = true, true, m.W, m.H
+		a.scr.notify()
+		a.scr.mu.Unlock()
+		if !already {
+			openAppFull("http://" + uiAddr + "/screen")
 		}
 		log.Print("Showing the Windows extended screen")
 	case "screen-stop":

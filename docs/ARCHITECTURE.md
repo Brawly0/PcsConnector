@@ -6,7 +6,7 @@
  │ pcsc host             │◄════════════════►│ pcsc join            │
  │  clipboard · files    │  AES-GCM frames  │  clipboard · files   │
  ├───────────────────────┤                  ├──────────────────────┤
- │ virtual display + ffmpeg ── UDP 5000 ───►│ ffplay (fullscreen)  │   (Phase 3)
+ │ virtual display + GDI ── JPEG frames ───►│ app window (fullscr) │   (Phase 3)
  │ input capture ◄──────── input events ────│ input injection      │   (Phase 2/3)
  └───────────────────────┘                  └──────────────────────┘
 ```
@@ -22,10 +22,10 @@ Why Go: single static binary (~3.5 MB), ~9 MB RAM idle, no runtime on Ubuntu, cr
 ## Roadmap
 1. **Phase 1 (done):** secure channel, clipboard text, folder-based file transfer.
 2. **Phase 2 – input:** reuse Deskflow first (Input Leap is archived). Native replacement: capture mouse/keys on Windows (low-level hooks), send over the existing channel when the cursor crosses the screen edge, inject on Ubuntu via `uinput`/XTest. Needs a low-level keyboard/mouse hooks on Windows (`SetWindowsHookEx` via syscall) and `/dev/uinput` on Linux – both doable in Go without cgo.
-3. **Phase 3 – extended screen:** app-managed ffmpeg capture/stream of the virtual monitor, auto-start/stop with the session, resolution negotiation, hardware encoding. Optionally forward clicks made on the laptop's stream back to the virtual monitor.
+3. **Phase 3 – extended screen:** built-in GDI capture of the virtual monitor, JPEG frames over the encrypted channel (frame type 2), bundled driver installed by one click. Next: resolution negotiation, hardware encoding. Optionally forward clicks made on the laptop's stream back to the virtual monitor.
 4. **Phase 4 – polish:** richer clipboard (images, files), drag-and-drop files, TLS/pairing instead of a pasted token, tray UI, installers.
 
 ## Known limits
 - Text-only clipboard. Large clipboards (>4 MB) are dropped by the frame limit.
 - No replay protection / forward secrecy.
-- The virtual display driver and its install are manual (needs admin + driver signing considerations).
+- The virtual display driver is installed with one UAC prompt; it is a third-party signed driver (Virtual-Display-Driver).

@@ -17,3 +17,15 @@ func openApp(url string) {
 	}
 	exec.Command("xdg-open", url).Start()
 }
+
+// openAppFull shows url in a fullscreen app window.
+func openAppFull(url string) {
+	for _, b := range []string{"google-chrome", "chromium", "chromium-browser", "microsoft-edge", "brave-browser"} {
+		if p, err := exec.LookPath(b); err == nil {
+			if exec.Command(p, "--app="+url, "--start-fullscreen").Start() == nil {
+				return
+			}
+		}
+	}
+	exec.Command("xdg-open", url).Start()
+}

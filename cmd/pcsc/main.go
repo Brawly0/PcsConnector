@@ -76,6 +76,8 @@ func main() {
 	}
 
 	switch cmd {
+	case "install-display":
+		runInstallDisplay()
 	case "ui":
 		runUI(d, *port, true)
 	case "token":
@@ -113,13 +115,13 @@ func main() {
 }
 
 func doctor() {
-	need := []string{"ffplay"}
-	if runtime.GOOS == "windows" {
-		need = []string{"ffmpeg"}
-	} else if os.Getenv("WAYLAND_DISPLAY") != "" {
-		need = append(need, "wl-paste", "wl-copy")
-	} else {
-		need = append(need, "xclip")
+	var need []string
+	if runtime.GOOS != "windows" {
+		if os.Getenv("WAYLAND_DISPLAY") != "" {
+			need = []string{"wl-paste", "wl-copy"}
+		} else {
+			need = []string{"xclip"}
+		}
 	}
 	fmt.Printf("platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	for _, c := range need {
