@@ -46,6 +46,10 @@ type app struct {
 	peerIP string // remote address of the current connection
 
 	scr screenState
+
+	kvm     kvmState
+	kvmOn   atomic.Bool
+	kvmSide atomic.Int32
 }
 
 func newApp(d dirs, token string, noClip bool) (*app, error) {
@@ -56,6 +60,7 @@ func newApp(d dirs, token string, noClip bool) (*app, error) {
 	}
 	a := &app{dirs: d, key: deriveKey(token), done: make(chan struct{})}
 	a.clipOn.Store(!noClip)
+	a.kvmOn.Store(true)
 	debug.FreeOSMemory() // hand scrypt's 16 MB scratch space back to the OS
 	go a.watchOutbox()
 	return a, nil
@@ -191,12 +196,17 @@ func (a *app) handle(s *session) {
 			a.peer = &m
 			a.mu.Unlock()
 			log.Printf("Connected to %s (%s)", m.Name, m.Platform)
+			a.sendScreenSize()
 		case "clip":
 			if a.clipOn.Load() {
 				clip.apply(m.Text)
 			}
 		case "file-start":
 			rx.start(m.Name)
+		case "screen-size":
+			a.kvmPeerSize(m.W, m.H)
+		case "kvm":
+			a.kvmRecv(m.Ev)
 		case "input":
 			a.input(m.Ev)
 		case "file-end":

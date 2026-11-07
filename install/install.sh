@@ -14,6 +14,13 @@ sudo apt-get install -y "$clip"
 have=; for b in google-chrome chromium chromium-browser microsoft-edge; do command -v $b >/dev/null 2>&1 && have=1; done
 [ -n "$have" ] || sudo snap install chromium || true
 
+echo "==> Allowing keyboard/mouse sharing (uinput)"
+echo 'KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"' | sudo tee /etc/udev/rules.d/60-pcsconnector-uinput.rules >/dev/null
+echo uinput | sudo tee /etc/modules-load.d/pcsconnector.conf >/dev/null
+sudo modprobe uinput || true
+sudo udevadm control --reload-rules || true
+sudo udevadm trigger /dev/uinput 2>/dev/null || sudo udevadm trigger || true
+
 echo "==> Installing PcsConnector"
 mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.config/autostart"
 install -m 755 "$bin" "$HOME/.local/bin/pcsc"

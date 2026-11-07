@@ -178,13 +178,14 @@ func (u *ui) state() map[string]any {
 	st := map[string]any{
 		"mode": cfg.Mode, "host": cfg.Host, "code": cfg.Token, "ips": localIPs(), "platform": runtime.GOOS,
 		"running": a != nil, "connected": false, "port": u.port, "log": u.ring.get(),
-		"vmon": vmonStatus(), "inbox": listDir(u.d.inbox), "sent": listDir(u.d.sent), "dir": u.d.home,
+		"vmon": vmonStatus(), "kvm": map[string]any{}, "inbox": listDir(u.d.inbox), "sent": listDir(u.d.sent), "dir": u.d.home,
 	}
 	if a != nil {
 		peer, ip := a.peerInfo()
 		st["connected"] = a.current() != nil && peer != nil
 		st["clip"] = a.clipOn.Load()
 		st["screen"] = a.screenOn()
+		st["kvm"] = a.kvmStatus()
 		if peer != nil {
 			st["peer"] = map[string]string{"name": peer.Name, "platform": peer.Platform, "ip": ip}
 		}
@@ -301,6 +302,33 @@ func (u *ui) handler() http.Handler {
 				fl.Flush()
 			}
 		}
+	})
+	mux.HandleFunc("/api/screensize", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		a := u.a
+		u.mu.Unlock()
+		var wd, ht int
+		fmt.Sscan(r.URL.Query().Get("w"), &wd)
+		fmt.Sscan(r.URL.Query().Get("h"), &ht)
+		if a != nil && wd > 200 && ht > 200 {
+			a.localScreen(wd, ht)
+		}
+		w.WriteHeader(204)
+	})
+	mux.HandleFunc("/api/kvm", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		a := u.a
+		u.mu.Unlock()
+		if a != nil {
+			a.kvmOn.Store(r.URL.Query().Get("on") != "0")
+			if r.URL.Query().Get("side") == "left" {
+				a.kvmSide.Store(1)
+			} else {
+				a.kvmSide.Store(0)
+			}
+			a.kvmRestart()
+		}
+		reply(w, nil)
 	})
 	mux.HandleFunc("/api/input", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()

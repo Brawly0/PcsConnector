@@ -106,6 +106,15 @@ ol.steps{padding-left:20px;margin:6px 0}ol.steps li{margin:4px 0}
     <ul class="list" id="inbox"></ul>
   </div>
 
+  <div class="card" id="c-kvm">
+    <h2>Keyboard &amp; mouse</h2>
+    <div id="kvm-host">
+      <div class="row sp"><div><b>Share with the laptop</b><div class="small mut" id="kvm-hint">Push the mouse off the screen edge to control the laptop. Press Scroll Lock to switch.</div></div><label><input type="checkbox" id="kvmOn" checked> On</label></div>
+      <div class="row" style="margin-top:10px"><span class="small mut">Laptop is on the</span><select id="kvmSide"><option value="right">right</option><option value="left">left</option></select><span class="small" id="kvm-st"></span></div>
+    </div>
+    <p id="kvm-join" class="small mut hide" style="margin:0">Move the mouse off the edge of the Windows PC and it appears here. Your keyboard and mouse then control this laptop.</p>
+  </div>
+
   <div class="card" id="c-screen">
     <h2>Extended screen</h2>
     <div id="scr-host">
@@ -136,6 +145,8 @@ function render(){
   $('pair-host').classList.toggle('hide',!host);
   $('pair-join').classList.toggle('hide',host);
   $('scr-host').classList.toggle('hide',!host);
+  $('kvm-host').classList.toggle('hide',!host);$('kvm-join').classList.toggle('hide',host);
+  if(host&&S.kvm){if(document.activeElement!==$('kvmOn'))$('kvmOn').checked=!!S.kvm.on;if(document.activeElement!==$('kvmSide'))$('kvmSide').value=S.kvm.side?'left':'right';$('kvm-st').textContent=!S.kvm.on?'':S.kvm.active?'Controlling the laptop':S.kvm.ready?'Ready':'Waiting for the laptop app'}
   $('scr-join').classList.toggle('hide',host);
   if(host){ $('code').textContent=S.code; $('ips').innerHTML=(S.ips||[]).map(i=>'<span>'+i+'</span>').join('')||'<span class="mut">no network found</span>'; }
   else $('join-info').textContent=S.connected?'Paired with '+S.peer.name+'.':'Looking for the Windows PC at '+S.host+'…';
@@ -157,6 +168,9 @@ $('jgo').onclick=async()=>{
   const r=await api('join',{body:JSON.stringify({IP:$('jip').value,Code:$('jcode').value})});
   $('jerr').textContent=r.error||'';if(!r.error){picking=null;poll()}};
 $('unpair').onclick=async()=>{if(confirm('Disconnect and forget this pairing?')){await api('disconnect',{post:1});picking=null;poll()}};
+const kvmSet=()=>api('kvm?on='+($('kvmOn').checked?1:0)+'&side='+$('kvmSide').value,{post:1});
+$('kvmOn').onchange=kvmSet;$('kvmSide').onchange=kvmSet;
+if(S.platform!=='windows'||true){const rep=()=>api('screensize?w='+Math.round(screen.width*devicePixelRatio)+'&h='+Math.round(screen.height*devicePixelRatio),{post:1});setInterval(()=>{if(S.platform&&S.platform!=='windows'&&S.running)rep()},5000)}
 $('clip').onchange=e=>api('clip?on='+(e.target.checked?1:0),{post:1});
 $('openIn').onclick=()=>api('open?dir=inbox',{post:1});
 $('scrBtn').onclick=async e=>{
