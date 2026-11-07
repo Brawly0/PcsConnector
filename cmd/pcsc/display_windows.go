@@ -75,7 +75,7 @@ func listMonitors() []monitor {
 		dd := displayDevice{cb: uint32(unsafe.Sizeof(displayDevice{}))}
 		if r, _, _ := pEnumDisplayDevicesW.Call(uintptr(unsafe.Pointer(&mi.device[0])), 0, uintptr(unsafe.Pointer(&dd)), 0); r != 0 {
 			s := strings.ToLower(syscall.UTF16ToString(dd.str[:]) + " " + syscall.UTF16ToString(dd.id[:]))
-			m.Virtual = strings.Contains(s, "virtual display") || strings.Contains(s, "mttvdd") || strings.Contains(s, "idd")
+			m.Virtual = strings.Contains(s, "virtual display") || strings.Contains(s, "mttvdd") || strings.Contains(s, "mtt1337") || strings.Contains(s, "vdd by mtt")
 		}
 		out = append(out, m)
 		return 1
@@ -145,6 +145,7 @@ func (g *grabber) grab(buf []byte) bool {
 	if r == 0 {
 		return false
 	}
+	g.drawCursor()
 	copy(buf, unsafe.Slice((*byte)(g.bits), g.w*g.h*4))
 	return true
 }
@@ -162,4 +163,95 @@ func (g *grabber) close() {
 	if g.dc != 0 {
 		pReleaseDC.Call(0, g.dc)
 	}
+}
+
+var pChangeDisplaySettingsExW = user32.NewProc("ChangeDisplaySettingsExW")
+
+func monitorByName(name string) (monitor, bool) {
+	for _, m := range listMonitors() {
+		if m.Name == name {
+			return m, true
+		}
+	}
+	return monitor{}, false
+}
+
+var (
+	pGetCursorInfo = user32.NewProc("GetCursorInfo")
+	pGetIconInfo   = user32.NewProc("GetIconInfo")
+	pDrawIconEx    = user32.NewProc("DrawIconEx")
+)
+
+type cursorInfo struct {
+	size, flags uint32
+	h           uintptr
+	x, y        int32
+}
+
+type iconInfo struct {
+	icon       uint32
+	xHot, yHot uint32
+	_          uint32
+	mask, col  uintptr
+}
+
+// drawCursor paints the mouse pointer into the captured image (BitBlt leaves it out).
+func (g *grabber) drawCursor() {
+	ci := cursorInfo{size: uint32(unsafe.Sizeof(cursorInfo{}))}
+	if r, _, _ := pGetCursorInfo.Call(uintptr(unsafe.Pointer(&ci))); r == 0 || ci.flags&1 == 0 {
+		return
+	}
+	var ii iconInfo
+	if r, _, _ := pGetIconInfo.Call(ci.h, uintptr(unsafe.Pointer(&ii))); r != 0 {
+		if ii.mask != 0 {
+			pDeleteObject.Call(ii.mask)
+		}
+		if ii.col != 0 {
+			pDeleteObject.Call(ii.col)
+		}
+	}
+	pDrawIconEx.Call(g.mem, uintptr(int(ci.x)-g.x-int(ii.xHot)), uintptr(int(ci.y)-g.y-int(ii.yHot)), ci.h, 0, 0, 0, 0, 3)
+}
+
+// placeMonitor sets the virtual monitor's size and puts it to the right of the real monitors,
+// so nobody has to open Windows display settings. Reports whether anything changed.
+func placeMonitor(m monitor, w, h int) bool {
+	right, top, first := 0, 0, true
+	for _, o := range listMonitors() {
+		if o.Virtual {
+			continue
+		}
+		if first || o.X+o.W > right {
+			right = o.X + o.W
+		}
+		if o.Primary {
+			top = o.Y
+		}
+		first = false
+	}
+	if m.W == w && m.H == h && m.X == right && m.Y == top {
+		return false
+	}
+	dm := make([]byte, 220)
+	*(*uint16)(unsafe.Pointer(&dm[68])) = 220
+	*(*uint32)(unsafe.Pointer(&dm[72])) = 0x80000 | 0x100000 | 0x20
+	*(*int32)(unsafe.Pointer(&dm[76])) = int32(right)
+	*(*int32)(unsafe.Pointer(&dm[80])) = int32(top)
+	*(*uint32)(unsafe.Pointer(&dm[172])) = uint32(w)
+	*(*uint32)(unsafe.Pointer(&dm[176])) = uint32(h)
+	name, _ := syscall.UTF16PtrFromString(m.Name)
+	const updateRegistry, noReset = 1, 0x10000
+	pChangeDisplaySettingsExW.Call(uintptr(unsafe.Pointer(name)), uintptr(unsafe.Pointer(&dm[0])), 0, updateRegistry|noReset, 0)
+	pChangeDisplaySettingsExW.Call(0, 0, 0, 0, 0) // apply
+	return true
+}
+
+func virtualCount() int {
+	n := 0
+	for _, m := range listMonitors() {
+		if m.Virtual {
+			n++
+		}
+	}
+	return n
 }

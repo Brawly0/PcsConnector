@@ -21,6 +21,7 @@ type msg struct {
 	Size     int64  `json:"size,omitempty"`
 	W        int    `json:"w,omitempty"`
 	H        int    `json:"h,omitempty"`
+	Ev       []inEv `json:"ev,omitempty"`
 }
 
 func (s *session) send(m msg) error {
@@ -196,6 +197,8 @@ func (a *app) handle(s *session) {
 			}
 		case "file-start":
 			rx.start(m.Name)
+		case "input":
+			a.input(m.Ev)
 		case "file-end":
 			rx.end()
 		default:

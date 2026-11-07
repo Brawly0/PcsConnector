@@ -302,6 +302,16 @@ func (u *ui) handler() http.Handler {
 			}
 		}
 	})
+	mux.HandleFunc("/api/input", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		a := u.a
+		u.mu.Unlock()
+		var evs []inEv
+		if a != nil && json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&evs) == nil {
+			a.sendInput(evs)
+		}
+		w.WriteHeader(204)
+	})
 	mux.HandleFunc("/api/vmon/install", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, installDisplay())
 	})

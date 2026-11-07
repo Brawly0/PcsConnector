@@ -142,8 +142,8 @@ function render(){
   if(S.connected) setStat('Connected to '+S.peer.name+' ('+S.peer.ip+')','ok');
   else setStat(host?'Waiting for the laptop…':'Connecting…','wait');
   if(document.activeElement!==$('clip'))$('clip').checked=!!S.clip;
-  const vm=S.vmon&&S.vmon.installed,on=!!S.screen;$('scrBtn').textContent=vm?(on?'Stop extended screen':'Start extended screen'):'Set up virtual monitor';$('scrBtn').dataset.on=on?1:0;$('scrBtn').dataset.vm=vm?1:0;$('scrBtn').disabled=!S.connected&&vm;
-  $('scr-hint').textContent=vm?'Drag windows onto the new monitor in Windows. Arrange it in Settings > Display.':'One click installs the virtual monitor (Windows asks permission once).';
+  const vm=S.vmon&&S.vmon.installed&&!S.vmon.extra,on=!!S.screen;$('scrBtn').textContent=vm?(on?'Stop extended screen':'Start extended screen'):(S.vmon&&S.vmon.extra?'Remove extra virtual monitor':'Set up virtual monitor');$('scrBtn').dataset.on=on?1:0;$('scrBtn').dataset.vm=vm?1:0;$('scrBtn').disabled=!S.connected&&vm;
+  $('scr-hint').textContent=vm?'Everything is set up here: press Start. Move the mouse and type on the laptop to control the PC.':(S.vmon&&S.vmon.extra?'There is a duplicate virtual monitor. One click removes it (Windows asks permission once).':'One click installs the virtual monitor (Windows asks permission once).');
   const li=(a)=>(a||[]).map(f=>'<li><span>'+esc(f.name)+'</span><span class="mut">'+fmt(f.size)+'</span></li>').join('');
   $('inbox').innerHTML=li(S.inbox);
   $('log').textContent=(S.log||[]).join('\n');

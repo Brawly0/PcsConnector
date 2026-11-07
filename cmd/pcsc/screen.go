@@ -23,6 +23,7 @@ type screenState struct {
 	wait    chan struct{} // closed and replaced whenever jpg/on changes
 	w, h    int
 	viewing bool
+	monName string
 }
 
 func (a *app) screenOn() bool {
@@ -94,13 +95,19 @@ func (a *app) screenStart() error {
 	if !ok {
 		return fmt.Errorf("no virtual monitor yet - press \"Set up virtual monitor\" first")
 	}
+	if placeMonitor(m, 1920, 1080) {
+		time.Sleep(800 * time.Millisecond)
+		if m2, ok := monitorByName(m.Name); ok {
+			m = m2
+		}
+	}
 	a.screenStop()
 	if err := s.send(msg{T: "screen-start", W: m.W, H: m.H}); err != nil {
 		return err
 	}
 	stop := make(chan struct{})
 	a.scr.mu.Lock()
-	a.scr.stop, a.scr.on = stop, true
+	a.scr.stop, a.scr.on, a.scr.monName = stop, true, m.Name
 	a.scr.mu.Unlock()
 	go a.captureLoop(s, m, stop)
 	log.Printf("Extended screen started (%dx%d at %d,%d)", m.W, m.H, m.X, m.Y)
@@ -120,11 +127,11 @@ func (a *app) captureLoop(s *session, m monitor, stop chan struct{}) {
 		log.Printf("Cannot capture the screen: %v", err)
 		return
 	}
-	defer g.close()
+	defer func() { g.close() }()
 	buf, prev := make([]byte, m.W*m.H*4), make([]byte, m.W*m.H*4)
 	img := image.NewRGBA(image.Rect(0, 0, m.W, m.H))
 	var out bytes.Buffer
-	var last time.Time
+	var last, chk time.Time
 	tick := time.NewTicker(40 * time.Millisecond)
 	defer tick.Stop()
 	for {
@@ -134,6 +141,19 @@ func (a *app) captureLoop(s *session, m monitor, stop chan struct{}) {
 		case <-a.done:
 			return
 		case <-tick.C:
+		}
+		// follow the monitor if it was moved or resized in Windows display settings
+		if time.Since(chk) > time.Second {
+			chk = time.Now()
+			if n, ok := monitorByName(m.Name); ok && n != m && n.W > 0 && n.H > 0 {
+				if g2, err := newGrabber(n.X, n.Y, n.W, n.H); err == nil {
+					g.close()
+					g, m = g2, n
+					buf, prev = make([]byte, m.W*m.H*4), make([]byte, m.W*m.H*4)
+					img = image.NewRGBA(image.Rect(0, 0, m.W, m.H))
+					s.send(msg{T: "screen-start", W: m.W, H: m.H})
+				}
+			}
 		}
 		if !g.grab(buf) {
 			continue

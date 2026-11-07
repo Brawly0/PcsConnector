@@ -48,14 +48,15 @@ type spDevinfoData struct {
 var guidDisplay = guid{0x4D36E968, 0xE325, 0x11CE, [8]byte{0xBF, 0xC1, 0x08, 0x00, 0x2B, 0xE1, 0x03, 0x18}}
 
 func vmonStatus() map[string]any {
-	return map[string]any{"supported": true, "installed": hasVirtualDriver()}
+	n := virtualCount()
+	return map[string]any{"supported": true, "installed": n > 0, "extra": max(0, n-1)}
 }
 
 func vddLog() string { return filepath.Join(os.TempDir(), "pcsc-vdd.log") }
 
 // installDisplay is called from the UI: elevates a copy of this program and waits for the monitor to appear.
 func installDisplay() error {
-	if hasVirtualDriver() {
+	if virtualCount() == 1 {
 		return nil
 	}
 	exe, err := os.Executable()
@@ -70,7 +71,7 @@ func installDisplay() error {
 		return fmt.Errorf("Windows permission was declined - press the button again and choose Yes")
 	}
 	for i := 0; i < 20; i++ {
-		if hasVirtualDriver() {
+		if virtualCount() == 1 {
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -97,9 +98,20 @@ func lastErr(r uintptr, e error, what string) error {
 	return nil
 }
 
+// removeExtraDisplays keeps one virtual display device and removes duplicates (e.g. from pressing install twice).
+func removeExtraDisplays() {
+	c := exec.Command("powershell", "-NoProfile", "-Command", `Get-PnpDevice -FriendlyName 'Virtual Display Driver' -ErrorAction SilentlyContinue | Sort-Object InstanceId | Select-Object -Skip 1 | ForEach-Object { pnputil /remove-device $_.InstanceId }`)
+	hideWindow(c)
+	c.Run()
+}
+
 func doInstallDisplay() error {
 	if r, _, _ := pIsUserAnAdmin.Call(); r == 0 {
 		return fmt.Errorf("administrator rights are required")
+	}
+	if virtualCount() > 0 {
+		removeExtraDisplays()
+		return nil
 	}
 	dir := filepath.Join(os.Getenv("ProgramData"), "PcsConnector", "vdd")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -149,5 +161,9 @@ func doInstallDisplay() error {
 	var reboot int32
 	const installFlagForce = 1
 	r, _, e = pUpdateDriver.Call(0, uintptr(unsafe.Pointer(hwp)), uintptr(unsafe.Pointer(infp)), installFlagForce, uintptr(unsafe.Pointer(&reboot)))
-	return lastErr(r, e, "UpdateDriverForPlugAndPlayDevices")
+	if err := lastErr(r, e, "UpdateDriverForPlugAndPlayDevices"); err != nil {
+		return err
+	}
+	removeExtraDisplays()
+	return nil
 }
