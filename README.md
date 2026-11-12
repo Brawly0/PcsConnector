@@ -2,6 +2,8 @@
 
 Use an **Ubuntu laptop as an extended screen for a Windows PC**, with shared mouse/keyboard, clipboard and file transfer.
 
+<p align="center"><img src="docs/images/app-windows.png" alt="PcsConnector window on Windows, paired with an Ubuntu laptop, with clipboard sync on and received files listed" width="620"></p>
+
 Written in **Go**: one ~7 MB static binary per OS, ~10 MB RAM idle, nothing to install at runtime. The app window is a built-in local web page (no Electron).
 
 | Feature | How | Status |
