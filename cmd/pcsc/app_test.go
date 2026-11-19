@@ -62,3 +62,37 @@ func TestWrongTokenRejected(t *testing.T) {
 		t.Fatal("file crossed with wrong token")
 	}
 }
+
+// The laptop finds the PC by its code alone, and a laptop with another code finds nothing.
+func TestDiscoverByCode(t *testing.T) {
+	host, _ := newApp(testDirs(t), "ABCDE-FGHJK", true)
+	go host.serve(24896)
+	time.Sleep(200 * time.Millisecond)
+	defer host.close()
+
+	stranger, _ := newApp(testDirs(t), "ZZZZZ-ZZZZZ", true)
+	if _, ok := stranger.discover(24896, 1500*time.Millisecond); ok {
+		t.Fatal("a laptop with a different code found the PC")
+	}
+	stranger.close()
+
+	join, _ := newApp(testDirs(t), "ABCDE-FGHJK", true)
+	defer join.close()
+	go join.dial("", 24896)
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if p, _ := join.peerInfo(); p != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("the laptop did not find and connect to the PC by code")
+}
+
+func TestCheckCode(t *testing.T) {
+	for in, ok := range map[string]bool{"abcde fghjk": true, "ABCDE-FGHJK": true, "ABCDEFGHJK": true, "ABCDE-FGHJ": false, "ABCDE-FGHJ0": false, "": false} {
+		if err := checkCode(normCode(in)); (err == nil) != ok {
+			t.Errorf("checkCode(%q) = %v, want ok=%v", in, err, ok)
+		}
+	}
+}

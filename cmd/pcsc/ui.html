@@ -5,189 +5,282 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PcsConnector</title>
 <style>
-:root{--bg:#f4f5f8;--card:#fff;--ink:#14161c;--mut:#6b7280;--line:#e3e6ec;--acc:#4f46e5;--acc2:#6366f1;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--chip:#eef0ff}
-@media (prefers-color-scheme:dark){:root{--bg:#0e1015;--card:#171a22;--ink:#eceef4;--mut:#8b93a5;--line:#262a36;--acc:#818cf8;--acc2:#6366f1;--chip:#232744}}
+:root{--bg:#f5f6f9;--card:#fff;--ink:#14161c;--mut:#687083;--line:#e2e5ec;--acc:#4f46e5;--acc-ink:#fff;--soft:#eef0ff;--ok:#15803d;--ok-soft:#e8f6ed;--warn:#b45309;--bad:#dc2626}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1116;--card:#181b23;--ink:#eceef4;--mut:#8d95a8;--line:#272b37;--acc:#818cf8;--acc-ink:#0f1116;--soft:#232744;--ok:#4ade80;--ok-soft:#163222;--warn:#fbbf24;--bad:#f87171}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:760px;margin:0 auto;padding:20px 16px 48px}
-header{display:flex;align-items:center;gap:12px;margin:8px 0 20px}
-.logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--acc2),#a855f7);display:grid;place-items:center;color:#fff;font-weight:700}
-h1{font-size:19px;margin:0}
-.pill{margin-left:auto;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:13px}
-.dot{width:9px;height:9px;border-radius:50%;background:var(--mut)}
-.dot.ok{background:var(--ok);box-shadow:0 0 0 4px #16a34a22}.dot.wait{background:var(--warn);animation:p 1.4s infinite}
-@keyframes p{50%{opacity:.35}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:14px}
-.card h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0 0 12px;font-weight:600}
-.choose{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:560px){.choose{grid-template-columns:1fr}}
-.opt{all:unset;cursor:pointer;display:block;padding:20px;border:2px solid var(--line);border-radius:16px;background:var(--card)}
-.opt:hover,.opt:focus-visible{border-color:var(--acc)}
-.opt b{display:block;font-size:17px;margin:6px 0 4px}.opt span{color:var(--mut);font-size:14px}.opt .ic{font-size:28px}
-.code{font:600 34px/1.1 ui-monospace,Consolas,monospace;letter-spacing:.08em;text-align:center;padding:18px;background:var(--chip);border-radius:12px;user-select:all}
-.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.row.sp{justify-content:space-between}
-button.b,.btn{font:inherit;font-weight:600;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;background:var(--acc2);color:#fff}
-button.b.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
-button.b.danger{background:transparent;color:var(--bad);border:1px solid var(--line)}
-button.b:disabled{opacity:.5;cursor:default}
-input[type=text],input[type=number]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
-label.f{display:block;font-size:13px;color:var(--mut);margin:12px 0 4px}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif}
+main{max-width:560px;margin:0 auto;padding:18px 16px 28px}
+header{display:flex;align-items:center;gap:10px;margin:2px 0 18px}
+header svg{flex:none}
+h1{font-size:17px;margin:0;font-weight:650}
+.pill{margin-left:auto;display:flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:13px;white-space:nowrap;max-width:60%;overflow:hidden;text-overflow:ellipsis}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mut);flex:none}
+.dot.ok{background:var(--ok)}.dot.wait{background:var(--warn);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:12px}
+h2{font-size:20px;line-height:1.25;margin:0 0 6px;font-weight:650}
+h3{font-size:15px;margin:0;font-weight:600}
+p{margin:0 0 10px}
 .mut{color:var(--mut)}.small{font-size:13px}
-.ips span{display:inline-block;background:var(--chip);border-radius:8px;padding:2px 10px;margin:2px 6px 2px 0;font-family:ui-monospace,Consolas,monospace;user-select:all}
-.drop{border:2px dashed var(--line);border-radius:14px;padding:26px;text-align:center;color:var(--mut);transition:.15s}
-.drop.on{border-color:var(--acc);background:var(--chip);color:var(--ink)}
-.list{list-style:none;margin:8px 0 0;padding:0}.list li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
-.list li span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sw{display:flex;align-items:center;gap:12px;justify-content:space-between}
-.tg{position:relative;width:46px;height:26px;flex:none}.tg input{opacity:0;position:absolute;inset:0;margin:0;cursor:pointer;z-index:2}
-.tg i{position:absolute;inset:0;background:var(--line);border-radius:99px;transition:.15s}.tg i:after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s}
-.tg input:checked+i{background:var(--ok)}.tg input:checked+i:after{left:23px}
-.err{color:var(--bad);font-size:14px;margin-top:8px;min-height:1em}
-details summary{cursor:pointer;color:var(--mut);font-size:14px}
-pre{margin:8px 0 0;padding:12px;background:var(--bg);border-radius:10px;font-size:12px;max-height:150px;overflow:auto;white-space:pre-wrap}
 .hide{display:none!important}
-ol.steps{padding-left:20px;margin:6px 0}ol.steps li{margin:4px 0}
+.row{display:flex;gap:10px;align-items:center}
+.sp{justify-content:space-between}
+.grow{flex:1;min-width:0}
+button{font:inherit;cursor:pointer}
+.btn{font-weight:600;border:0;border-radius:10px;padding:10px 16px;background:var(--acc);color:var(--acc-ink)}
+.btn.wide{width:100%;padding:12px}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn:disabled{opacity:.5;cursor:default}
+.link{all:unset;cursor:pointer;color:var(--acc);font-size:13px}
+.link.bad{color:var(--bad)}
+input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+input[type=text]:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.codein{font:600 26px/1.2 ui-monospace,"Cascadia Mono",Consolas,monospace;letter-spacing:.12em;text-align:center;text-transform:uppercase;padding:14px}
+.code{font:650 34px/1.1 ui-monospace,"Cascadia Mono",Consolas,monospace;letter-spacing:.1em;text-align:center;padding:16px 10px;background:var(--soft);border-radius:12px;user-select:all}
+.cmd{display:flex;gap:8px;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 8px 8px 12px}
+.cmd code{flex:1;min-width:0;font:12.5px/1.4 ui-monospace,Consolas,monospace;overflow-x:auto;white-space:nowrap;user-select:all;scrollbar-width:none}
+.copy{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:5px 10px;font-size:13px}
+.steps{list-style:none;margin:14px 0 0;padding:0;counter-reset:s}
+.steps>li{counter-increment:s;position:relative;padding-left:36px;margin-bottom:16px}
+.steps>li:before{content:counter(s);position:absolute;left:0;top:0;width:24px;height:24px;border-radius:50%;background:var(--soft);color:var(--acc);font-weight:700;font-size:13px;display:grid;place-items:center}
+.steps>li>b{display:block;margin-bottom:8px}
+.err{color:var(--bad);font-size:14px;margin-top:8px;min-height:1.2em}
+.spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:rot .8s linear infinite;flex:none}
+@keyframes rot{to{transform:rotate(1turn)}}
+details summary{cursor:pointer;color:var(--mut);font-size:13px;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details summary:before{content:"▸ ";}
+details[open] summary:before{content:"▾ ";}
+details>div{margin-top:10px}
+.ips span{display:inline-block;background:var(--soft);border-radius:7px;padding:2px 9px;margin:2px 6px 2px 0;font:13px ui-monospace,Consolas,monospace;user-select:all}
+.hero{display:flex;align-items:center;gap:12px;background:var(--ok-soft);border-color:transparent}
+.check{width:34px;height:34px;border-radius:50%;background:var(--ok);display:grid;place-items:center;flex:none}
+.hero h3{font-size:16px}
+.tg{position:relative;width:42px;height:24px;flex:none}
+.tg input{opacity:0;position:absolute;inset:0;margin:0;cursor:pointer;z-index:2}
+.tg i{position:absolute;inset:0;background:var(--line);border-radius:99px;transition:.15s}
+.tg i:after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px #0003}
+.tg input:checked+i{background:var(--ok)}.tg input:checked+i:after{left:21px}
+.tg input:focus-visible+i{outline:2px solid var(--acc);outline-offset:2px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--ink);padding:6px 14px;font-size:14px}
+.seg button.on{background:var(--acc);color:var(--acc-ink);font-weight:600}
+.status{font-size:13px;margin-top:10px;display:flex;align-items:center;gap:7px}
+.status .dot{width:7px;height:7px}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:20px;text-align:center;color:var(--mut);transition:.15s;font-size:14px}
+.drop.on{border-color:var(--acc);background:var(--soft);color:var(--ink)}
+.list{list-style:none;margin:10px 0 0;padding:0}
+.list li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13.5px}
+.list li span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+pre{margin:0;padding:10px;background:var(--bg);border-radius:8px;font-size:11.5px;max-height:160px;overflow:auto;white-space:pre-wrap}
+footer{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;padding:4px 2px;font-size:13px;color:var(--mut)}
+footer label{display:flex;gap:8px;align-items:center;cursor:pointer}
+.help{margin:12px 0 0;padding-left:18px;font-size:13.5px;color:var(--mut)}
+.help li{margin:3px 0}
 </style>
 </head>
 <body>
 <main>
 <header>
-  <div class="logo">P</div><h1>PcsConnector</h1>
+  <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#4f46e5"/><rect x="5" y="9" width="12" height="9" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><rect x="18" y="12" width="9" height="7" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><path d="M8 22h6M20 22h5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+  <h1>PcsConnector</h1>
   <div class="pill"><span class="dot" id="dot"></span><span id="stat">Starting…</span></div>
 </header>
 
-<!-- Step 1: choose what this computer is -->
-<section id="v-choose" class="hide">
-  <p class="mut">What is this computer?</p>
-  <div class="choose">
-    <button class="opt" id="optHost"><span class="ic">🖥️</span><b>This is the Windows PC</b><span>The main computer. It shows a pairing code.</span></button>
-    <button class="opt" id="optJoin"><span class="ic">💻</span><b>This is the laptop</b><span>The extra screen. You type the code from the PC.</span></button>
-  </div>
-</section>
-
-<!-- Join form -->
-<section id="v-join" class="hide">
+<!-- Laptop, first run: type the code -->
+<section id="v-code" class="hide">
   <div class="card">
-    <h2>Connect to the Windows PC</h2>
-    <label class="f" for="jip">Windows PC address (shown on the PC)</label>
-    <input type="text" id="jip" placeholder="192.168.1.20" autocomplete="off" inputmode="decimal">
-    <label class="f" for="jcode">Pairing code</label>
-    <input type="text" id="jcode" placeholder="ABCDE-FGHJK" autocomplete="off" autocapitalize="characters">
-    <div class="row" style="margin-top:16px">
-      <button class="b" id="jgo">Connect</button>
-    </div>
+    <h2>Connect to your Windows PC</h2>
+    <p class="mut">Open PcsConnector on the PC and type the code it shows.</p>
+    <input type="text" id="jcode" class="codein" placeholder="ABCDE-FGHJK" maxlength="11" autocomplete="off" spellcheck="false" aria-label="Pairing code">
     <div class="err" id="jerr"></div>
+    <button class="btn wide" id="jgo">Connect</button>
+    <details style="margin-top:14px"><summary>PC on a different network (VPN, Tailscale)?</summary>
+      <div><input type="text" id="jip" placeholder="PC address, e.g. 100.101.102.103" autocomplete="off" spellcheck="false" aria-label="PC address">
+      <p class="small mut" style="margin:6px 0 0">The PC shows its addresses under "Laptop on a different network?". Leave this empty to find the PC automatically on your local network.</p></div>
+    </details>
   </div>
 </section>
 
-<!-- Dashboard -->
+<!-- Laptop: looking for the PC -->
+<section id="v-search" class="hide">
+  <div class="card">
+    <div class="row"><span class="spin"></span><h3 id="search-title">Looking for your PC…</h3></div>
+    <p class="small mut" style="margin:8px 0 0" id="search-sub"></p>
+    <ul class="help hide" id="search-help">
+      <li>Is PcsConnector open on the PC, showing this code?</li>
+      <li>Are both computers on the same network (same Wi-Fi or router)?</li>
+      <li>If Windows asked about the firewall, it must be allowed.</li>
+      <li>Over a VPN or Tailscale, go back and enter the PC's address.</li>
+    </ul>
+    <div class="row" style="margin-top:14px"><button class="btn ghost" id="cancel">Change code</button></div>
+  </div>
+</section>
+
+<!-- PC: waiting for a laptop -->
+<section id="v-pair" class="hide">
+  <div class="card">
+    <h2>Connect your laptop</h2>
+    <p class="mut">Use your Ubuntu laptop as an extra screen, with this PC's mouse, keyboard and clipboard.</p>
+    <ol class="steps">
+      <li><b>Install PcsConnector on the laptop</b>
+        <div class="small mut" style="margin:-4px 0 8px">Open a terminal there and run:</div>
+        <div class="cmd"><code id="installCmd"></code><button class="copy" data-copy="installCmd">Copy</button></div></li>
+      <li><b>Open it and type this code</b>
+        <div class="code" id="code">-----</div></li>
+    </ol>
+    <div class="row small mut"><span class="spin"></span><span>Waiting for the laptop…</span></div>
+    <details style="margin-top:14px"><summary>Laptop on a different network?</summary>
+      <div class="small mut">The laptop finds this PC by itself on the same network. Over a VPN or Tailscale, enter one of these addresses on the laptop:
+        <div class="ips" id="ips" style="margin-top:6px"></div>
+        <button class="link" id="newCode" style="margin-top:8px">Make a new code</button></div>
+    </details>
+  </div>
+</section>
+
+<!-- Connected -->
 <section id="v-dash" class="hide">
-  <div class="card" id="c-pair">
-    <h2>Pairing</h2>
-    <div id="pair-host">
-      <div class="code" id="code">-----</div>
-      <p class="small mut" style="margin:12px 0 4px">On the laptop open PcsConnector and enter this address and code:</p>
-      <div class="ips" id="ips"></div>
-    </div>
-    <div id="pair-join" class="hide"><span id="join-info"></span></div>
-  </div>
-
-  <div class="card" id="c-share">
-    <h2>Share</h2>
-    <div class="sw"><div><b>Clipboard</b><div class="small mut">Copy on one computer, paste on the other</div></div>
-      <label class="tg"><input type="checkbox" id="clip"><i></i></label></div>
-  </div>
-
-  <div class="card" id="c-files">
-    <h2>Send files</h2>
-    <div class="drop" id="drop">Drop files here to send them, or <a href="#" id="pick">choose files</a><input type="file" id="file" multiple class="hide"></div>
-    <div class="row sp" style="margin-top:12px"><span class="small mut">Received files land in your Inbox folder</span><button class="b ghost" id="openIn">Open Inbox</button></div>
-    <ul class="list" id="inbox"></ul>
+  <div class="card hero">
+    <div class="check"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="grow"><h3 id="hero-title">Connected</h3><div class="small mut" id="hero-sub"></div></div>
   </div>
 
   <div class="card" id="c-kvm">
-    <h2>Keyboard &amp; mouse</h2>
-    <div id="kvm-host">
-      <div class="row sp"><div><b>Share with the laptop</b><div class="small mut" id="kvm-hint">Push the mouse off the screen edge to control the laptop. Press Scroll Lock to switch.</div></div><label><input type="checkbox" id="kvmOn" checked> On</label></div>
-      <div class="row" style="margin-top:10px"><span class="small mut">Laptop is on the</span><select id="kvmSide"><option value="right">right</option><option value="left">left</option></select><span class="small" id="kvm-st"></span></div>
+    <div class="row sp"><h3>Mouse &amp; keyboard</h3><label class="tg" id="kvmTg"><input type="checkbox" id="kvmOn" aria-label="Share mouse and keyboard"><i></i></label></div>
+    <div id="kvm-pc">
+      <div class="row" style="margin-top:12px;flex-wrap:wrap"><span class="small mut">The laptop is to the</span>
+        <div class="seg" role="group" aria-label="Laptop side"><button data-side="left">◀ Left</button><button data-side="right">Right ▶</button></div></div>
+      <p class="small mut" style="margin:10px 0 0">Move the mouse off that edge to control the laptop. Scroll Lock switches back and forth.</p>
+      <div class="status"><span class="dot" id="kvm-dot"></span><span id="kvm-st"></span></div>
     </div>
-    <p id="kvm-join" class="small mut hide" style="margin:0">Move the mouse off the edge of the Windows PC and it appears here. Your keyboard and mouse then control this laptop.</p>
+    <p class="small mut hide" id="kvm-laptop" style="margin:8px 0 0">Move the PC's mouse off the edge of its screen: it appears here, and the keyboard follows.</p>
   </div>
 
   <div class="card" id="c-screen">
-    <h2>Extended screen</h2>
-    <div id="scr-host">
-      <p class="small mut" style="margin-top:0" id="scr-hint">Turns the laptop into a second monitor for this PC.</p>
-      <div class="row" style="margin-top:14px"><button class="b" id="scrBtn">Start extended screen</button><span class="err" id="serr"></span></div>
-    </div>
-    <p id="scr-join" class="small mut hide" style="margin:0">Start it from the Windows PC. The laptop opens the screen fullscreen automatically.</p>
+    <h3>Extended screen</h3>
+    <p class="small mut" style="margin:6px 0 12px" id="scr-hint"></p>
+    <div class="row"><button class="btn" id="scrBtn">Start extended screen</button><span class="err" id="serr" style="margin:0"></span></div>
   </div>
 
   <div class="card">
-    <div class="row sp"><details style="flex:1"><summary>Activity log</summary><pre id="log"></pre></details>
-      <button class="b danger" id="unpair">Disconnect &amp; reset</button></div>
+    <div class="row sp"><div><h3>Clipboard</h3><div class="small mut">Copy on one computer, paste on the other</div></div>
+      <label class="tg"><input type="checkbox" id="clip" aria-label="Share clipboard"><i></i></label></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:10px">Files</h3>
+    <div class="drop" id="drop">Drop files here to send them, or <button class="link" id="pick" style="font-size:14px">choose files</button></div><input type="file" id="file" multiple class="hide">
+    <div class="row sp" style="margin-top:12px"><span class="small mut">Received files</span><button class="link" id="openIn">Open folder</button></div>
+    <ul class="list" id="inbox"></ul>
   </div>
 </section>
+
+<footer id="foot" class="hide">
+  <label><span class="tg"><input type="checkbox" id="auto" aria-label="Start at login"><i></i></span>Start at login</label>
+  <details style="flex-basis:100%;order:3"><summary>Activity log</summary><div><pre id="log"></pre></div></details>
+  <span><span id="unpairWrap"><button class="link bad" id="unpair">Unpair</button> · </span><span id="ver"></span></span>
+</footer>
 </main>
 
 <script>
+const REPO='Brawly0/PcsConnector';
 const $=id=>document.getElementById(id);
 const api=(p,o={})=>fetch('/api/'+p,{method:o.body!==undefined||o.post?'POST':'GET',headers:{'X-PCSC':'1'},body:o.body}).then(r=>r.json().catch(()=>({})));
-let S={},view='',picking=null,autoHosted=false;
-const show=v=>{if(v===view)return;view=v;for(const id of['choose','join','dash'])$('v-'+id).classList.toggle('hide',id!==v)};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(0)+' KB':(n/1048576).toFixed(1)+' MB';
+let S={},view='',autoHosted=false,searchSince=0;
+$('installCmd').textContent='curl -fsSL https://raw.githubusercontent.com/'+REPO+'/main/install/install.sh | bash';
+
+function show(v){if(v===view)return;view=v;for(const id of['code','search','pair','dash'])$('v-'+id).classList.toggle('hide',id!==v);if(v==='code')setTimeout(()=>$('jcode').focus(),50);if(v==='search')searchSince=Date.now()}
+function setStat(t,k){$('stat').textContent=t;$('dot').className='dot '+k}
+const idle=el=>document.activeElement!==el;
 
 function render(){
-  const host=S.mode==='host';
-  if(!S.running){ if(S.platform==='windows'){ if(!autoHosted){autoHosted=true;api('host',{post:1}).then(poll)} setStat('Starting…','wait'); } else { show('join'); setStat('Not connected',''); } return; }
-  show('dash');
-  $('pair-host').classList.toggle('hide',!host);
-  $('pair-join').classList.toggle('hide',host);
-  $('scr-host').classList.toggle('hide',!host);
-  $('kvm-host').classList.toggle('hide',!host);$('kvm-join').classList.toggle('hide',host);
-  if(host&&S.kvm){if(document.activeElement!==$('kvmOn'))$('kvmOn').checked=!!S.kvm.on;if(document.activeElement!==$('kvmSide'))$('kvmSide').value=S.kvm.side?'left':'right';$('kvm-st').textContent=!S.kvm.on?'':S.kvm.active?'Controlling the laptop':S.kvm.ready?'Ready':'Waiting for the laptop app'}
-  $('scr-join').classList.toggle('hide',host);
-  if(host){ $('code').textContent=S.code; $('ips').innerHTML=(S.ips||[]).map(i=>'<span>'+i+'</span>').join('')||'<span class="mut">no network found</span>'; }
-  else $('join-info').textContent=S.connected?'Paired with '+S.peer.name+'.':'Looking for the Windows PC at '+S.host+'…';
-  if(S.connected) setStat('Connected to '+S.peer.name+' ('+S.peer.ip+')','ok');
-  else setStat(host?'Waiting for the laptop…':'Connecting…','wait');
-  if(document.activeElement!==$('clip'))$('clip').checked=!!S.clip;
-  const vm=S.vmon&&S.vmon.installed&&!S.vmon.extra,on=!!S.screen;$('scrBtn').textContent=vm?(on?'Stop extended screen':'Start extended screen'):(S.vmon&&S.vmon.extra?'Remove extra virtual monitor':'Set up virtual monitor');$('scrBtn').dataset.on=on?1:0;$('scrBtn').dataset.vm=vm?1:0;$('scrBtn').disabled=!S.connected&&vm;
-  $('scr-hint').textContent=vm?'Everything is set up here: press Start. Move the mouse and type on the laptop to control the PC.':(S.vmon&&S.vmon.extra?'There is a duplicate virtual monitor. One click removes it (Windows asks permission once).':'One click installs the virtual monitor (Windows asks permission once).');
-  const li=(a)=>(a||[]).map(f=>'<li><span>'+esc(f.name)+'</span><span class="mut">'+fmt(f.size)+'</span></li>').join('');
-  $('inbox').innerHTML=li(S.inbox);
+  const pc=S.platform==='windows',host=S.mode==='host';
+  $('foot').classList.toggle('hide',!S.running&&pc);
+  if(idle($('auto')))$('auto').checked=!!S.autostart;
+  $('ver').textContent=S.version||'';
   $('log').textContent=(S.log||[]).join('\n');
+  if(!S.running){
+    if(pc){if(!autoHosted){autoHosted=true;api('host',{post:1}).then(poll)}setStat('Starting…','wait')}
+    else{show('code');setStat('Not connected','')}
+    $('unpairWrap').classList.add('hide');return}
+  $('unpairWrap').classList.toggle('hide',host&&!S.connected);
+  if(!S.connected){
+    if(host){show('pair');$('code').textContent=S.code||'-----';
+      $('ips').innerHTML=(S.ips||[]).map(i=>'<span>'+esc(i)+'</span>').join('')||'<span>none found</span>';
+      setStat('Waiting for the laptop','wait')}
+    else{show('search');const t=S.target||S.host;
+      $('search-title').textContent=t?'Connecting to your PC…':'Looking for your PC…';
+      $('search-sub').textContent='Code '+(S.code||'')+(S.host?' · address '+S.host:t?' · found at '+t:' · searching this network');
+      $('search-help').classList.toggle('hide',Date.now()-searchSince<12000);
+      setStat('Connecting','wait')}
+    return}
+  show('dash');
+  const p=S.peer||{},k=S.kvm||{},L=k.link||{};
+  $('hero-title').textContent='Connected to '+(p.name||'the other computer');
+  $('hero-sub').textContent=(p.ip||'')+(L.ms?' · '+L.ms+' ms':'');
+  setStat('Connected','ok');
+  // mouse & keyboard
+  $('kvm-pc').classList.toggle('hide',!host);$('kvm-laptop').classList.toggle('hide',host);$('kvmTg').classList.toggle('hide',!host);
+  if(host){
+    if(idle($('kvmOn')))$('kvmOn').checked=!!k.on;
+    document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',(b.dataset.side==='left')===!!k.side));
+    let st,dk;
+    if(!k.on){st='Off';dk=''}else if(k.active){st='Controlling the laptop';dk='ok'}else if(k.ready){st='Ready';dk='ok'}else{st='Waiting for the laptop window (open PcsConnector there once)';dk='wait'}
+    if(k.on&&L.ms)st+=' · '+L.ms+' ms'+(+L.maxms>40?' (spikes to '+L.maxms+' ms: weak Wi-Fi?)':'')+(L.udp?'':' · slow path (UDP 24800 blocked on the laptop?)');
+    $('kvm-st').textContent=st;$('kvm-dot').className='dot '+dk}
+  // extended screen (PC only)
+  $('c-screen').classList.toggle('hide',!host);
+  if(host){const vm=S.vmon||{},ready=vm.installed&&!vm.extra,on=!!S.screen,b=$('scrBtn');
+    b.textContent=ready?(on?'Stop extended screen':'Start extended screen'):(vm.extra?'Remove extra virtual monitor':'Set up virtual monitor');
+    b.dataset.on=on?1:0;b.dataset.vm=ready?1:0;
+    $('scr-hint').textContent=ready?'Shows a second Windows monitor on the laptop, fullscreen. Best for documents and reference; video lags a little.':vm.extra?'There is a duplicate virtual monitor. One click removes it (Windows asks permission once).':'Adds a virtual monitor to Windows for the laptop to show. One click; Windows asks permission once.'}
+  if(idle($('clip')))$('clip').checked=!!S.clip;
+  $('inbox').innerHTML=(S.inbox||[]).map(f=>'<li><span>'+esc(f.name)+'</span><span class="mut">'+fmt(f.size)+'</span></li>').join('')||'<li><span class="mut">Nothing yet</span><span></span></li>';
 }
-const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function setStat(t,k){$('stat').textContent=t;$('dot').className='dot '+k}
 async function poll(){try{S=await fetch('/api/state').then(r=>r.json());render()}catch(e){setStat('App closed','')}}
-setInterval(poll,1500);poll();
+setInterval(poll,1200);poll();
 
-$('jgo').onclick=async()=>{
-  const r=await api('join',{body:JSON.stringify({IP:$('jip').value,Code:$('jcode').value})});
-  $('jerr').textContent=r.error||'';if(!r.error){picking=null;poll()}};
-$('unpair').onclick=async()=>{if(confirm('Disconnect and forget this pairing?')){await api('disconnect',{post:1});picking=null;poll()}};
-const kvmSet=()=>api('kvm?on='+($('kvmOn').checked?1:0)+'&side='+$('kvmSide').value,{post:1});
-$('kvmOn').onchange=kvmSet;$('kvmSide').onchange=kvmSet;
-if(S.platform!=='windows'||true){const rep=()=>api('screensize?w='+Math.round(screen.width*devicePixelRatio)+'&h='+Math.round(screen.height*devicePixelRatio),{post:1});setInterval(()=>{if(S.platform&&S.platform!=='windows'&&S.running)rep()},5000)}
+// laptop: code entry, auto-formatted as ABCDE-FGHJK
+$('jcode').addEventListener('input',e=>{const el=e.target,raw=el.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,10);el.value=raw.length>5?raw.slice(0,5)+'-'+raw.slice(5):raw;$('jerr').textContent=''});
+const join=async()=>{const r=await api('join',{body:JSON.stringify({IP:$('jip').value,Code:$('jcode').value})});$('jerr').textContent=r.error||'';if(!r.error)poll()};
+$('jgo').onclick=join;
+[$('jcode'),$('jip')].forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter')join()}));
+$('cancel').onclick=async()=>{await api('disconnect',{post:1});poll()};
+// PC
+$('newCode').onclick=async()=>{await api('host?new=1',{post:1});poll()};
+document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{navigator.clipboard.writeText($(b.dataset.copy).textContent).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1500)})});
+const kvmSet=(side)=>api('kvm?on='+($('kvmOn').checked?1:0)+'&side='+(side||(S.kvm&&S.kvm.side?'left':'right')),{post:1}).then(poll);
+$('kvmOn').onchange=()=>kvmSet();
+document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>kvmSet(b.dataset.side));
+$('scrBtn').onclick=async e=>{const b=e.target;$('serr').textContent='';
+  if(b.dataset.vm!=='1'){b.disabled=true;b.textContent='Working…';const r=await api('vmon/install',{post:1});b.disabled=false;$('serr').textContent=r.error||'';poll();return}
+  const r=await api('screen?on='+(b.dataset.on==='1'?0:1),{post:1});$('serr').textContent=r.error||'';poll()};
+// both
 $('clip').onchange=e=>api('clip?on='+(e.target.checked?1:0),{post:1});
+$('auto').onchange=e=>api('autostart?on='+(e.target.checked?1:0),{post:1}).then(poll);
 $('openIn').onclick=()=>api('open?dir=inbox',{post:1});
-$('scrBtn').onclick=async e=>{
-  const bt=e.target;$('serr').textContent='';
-  if(bt.dataset.vm!=='1'){bt.disabled=true;bt.textContent='Installing…';const r=await api('vmon/install',{post:1});$('serr').textContent=r.error||'';poll();return}
-  if(bt.dataset.on==='1'){await api('screen?on=0',{post:1});poll();return}
-  const r=await api('screen?on=1',{post:1});
-  $('serr').textContent=r.error||'';poll()};
-
-async function sendFiles(fs){for(const f of fs){await fetch('/api/send?name='+encodeURIComponent(f.name),{method:'POST',headers:{'X-PCSC':'1'},body:f})}
-  $('drop').textContent='Sent '+fs.length+' file(s) to the queue ✓';setTimeout(()=>location.reload(),1800)}
+let unpairArmed=0;
+$('unpair').onclick=async()=>{const b=$('unpair');
+  if(Date.now()-unpairArmed>3000){unpairArmed=Date.now();b.textContent='Click again to unpair';setTimeout(()=>b.textContent='Unpair',3000);return}
+  b.textContent='Unpair';await api('disconnect',{post:1});autoHosted=false;poll()};
+// laptop: tell the PC this screen's size (mouse sharing needs it) right away, then every 5 s
+const repOK=()=>S.platform&&S.platform!=='windows'&&S.running;
+const rep=()=>api('screensize?w='+Math.round(screen.width*devicePixelRatio)+'&h='+Math.round(screen.height*devicePixelRatio),{post:1});
+let repDone=false;setInterval(()=>{if(repOK())rep()},5000);
+setInterval(()=>{if(repOK()&&!repDone){repDone=true;rep()}else if(!S.running)repDone=false},500);
+// files
+async function sendFiles(fs){const d=$('drop'),n=fs.length;d.textContent='Sending '+n+' file'+(n>1?'s':'')+'…';
+  for(const f of fs)await fetch('/api/send?name='+encodeURIComponent(f.name),{method:'POST',headers:{'X-PCSC':'1'},body:f});
+  d.textContent='Sent '+n+' file'+(n>1?'s':'')+' ✓';setTimeout(resetDrop,2500)}
+function resetDrop(){const d=$('drop');d.innerHTML='Drop files here to send them, or <button class="link" id="pick" style="font-size:14px">choose files</button>';$('pick').onclick=()=>$('file').click()}
 const drop=$('drop');
 ['dragover','dragenter'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('on')}));
 ['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('on')}));
-drop.addEventListener('drop',e=>{if(e.dataTransfer.files.length)sendFiles(e.dataTransfer.files)});
-$('pick').onclick=e=>{e.preventDefault();$('file').click()};
-$('file').onchange=e=>sendFiles(e.target.files);
+drop.addEventListener('drop',e=>{if(e.dataTransfer.files.length)sendFiles([...e.dataTransfer.files])});
+$('pick').onclick=()=>$('file').click();
+$('file').onchange=e=>{if(e.target.files.length)sendFiles([...e.target.files]);e.target.value=''};
 </script>
 </body>
 </html>

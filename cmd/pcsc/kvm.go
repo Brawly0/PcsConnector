@@ -47,11 +47,16 @@ func (a *app) kvmRestart() {
 	a.kvm.mu.Unlock()
 }
 
+// kvmPeerSize (host) handles the laptop's size report. The laptop repeats it every few seconds, so only
+// restart when something changed: a restart drops the cursor back onto the PC mid-use.
 func (a *app) kvmPeerSize(w, h int) {
 	a.kvm.mu.Lock()
+	same := a.kvm.pw == w && a.kvm.ph == h && a.kvm.stop != nil
 	a.kvm.pw, a.kvm.ph = w, h
 	a.kvm.mu.Unlock()
-	a.kvmRestart()
+	if !same {
+		a.kvmRestart()
+	}
 }
 
 // localScreen (laptop) records this screen's size and tells the host.
@@ -75,5 +80,5 @@ func (a *app) kvmStatus() map[string]any {
 	a.kvm.mu.Lock()
 	ready := a.kvm.pw > 0
 	a.kvm.mu.Unlock()
-	return map[string]any{"on": a.kvmOn.Load(), "side": a.kvmSide.Load(), "active": a.kvm.active.Load(), "ready": ready}
+	return map[string]any{"on": a.kvmOn.Load(), "side": a.kvmSide.Load(), "active": a.kvm.active.Load(), "ready": ready, "link": a.fastStatus()}
 }

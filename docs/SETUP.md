@@ -1,45 +1,53 @@
-# Setup guide
+# Setup guide (manual and advanced)
 
-Steps marked **(untested)** are documented from the tools' standard usage and have not yet been verified on this hardware.
+The [README](../README.md) covers the normal setup: download on Windows, one command on Ubuntu, type the code. This page covers everything else.
 
-## 0. Network
-Put both machines on the same LAN (wired or 5 GHz Wi-Fi). Find the Windows IP with `ipconfig` and the Ubuntu IP with `ip a`. Allow inbound TCP 24800 (pcsc) on the Windows firewall when prompted.
+## Install without the one-liner
 
-## 1. Install and connect (app window)
-**Windows PC**
-1. `./build.ps1` (needs Go) → `dist/PcsConnector.exe` and `dist/pcsconnector-ubuntu.tar.gz`.
-2. Double-click `PcsConnector.exe`; a browser window opens at `http://127.0.0.1:24801`.
-3. Click **This is the Windows PC**. Note the **pairing code** and the **address** (the 192.168.x.x one).
-4. Allow the Windows Firewall prompt (private networks). If it never appeared, run once as admin:
-   `netsh advfirewall firewall add rule name="PcsConnector" dir=in action=allow protocol=TCP localport=24800`
+**Offline bundle:** download `pcsconnector-ubuntu.tar.gz` from the [releases](https://github.com/Brawly0/PcsConnector/releases), copy it to the laptop, then run:
 
-**Ubuntu laptop**
-1. Copy `pcsconnector-ubuntu.tar.gz` over (USB stick, `scp user@laptop:` etc.).
-2. In a terminal: `tar xzf pcsconnector-ubuntu.tar.gz && bash pcsconnector-ubuntu/install.sh` (installs xclip/wl-clipboard, adds a menu entry and login autostart).
-3. Open **PcsConnector** from the app menu (or run `~/.local/bin/pcsc`), click **This is the laptop**, enter the Windows address and the pairing code, press **Connect**.
-4. Both headers turn green: "Connected". It reconnects by itself after reboots.
+```bash
+tar xzf pcsconnector-ubuntu.tar.gz && bash pcsconnector-ubuntu/install.sh
+```
 
-Clipboard sync is on by default (toggle in the window). Drag files into the window to send; they land in `~/PcsConnector/Inbox` on the other machine.
+**Pin a version:** `curl -fsSL https://raw.githubusercontent.com/Brawly0/PcsConnector/main/install/install.sh | PCSC_VERSION=v1.0.0 bash`
 
-**Extended screen (untested):** on the Windows app press **Set up virtual monitor** (one Windows permission prompt; installs a bundled, signed virtual display driver), then **Start extended screen**. The laptop opens it fullscreen. No ffmpeg or other downloads.
+**What the installer does**, all of it undone by deleting the listed files:
+- `/etc/udev/rules.d/60-pcsconnector-uinput.rules` and `/etc/modules-load.d/pcsconnector.conf` give your login session access to `/dev/uinput`, which is how the PC's mouse and keyboard are typed into the laptop. It also grants the current session access right away, so you don't need to log out.
+- If ufw is active, it adds `ufw allow 24800/udp` (remove it with `sudo ufw delete allow 24800/udp`).
+- If missing, it installs `wl-clipboard` (Wayland) or `xclip` (X11), plus Chromium when no Chromium-family browser exists (the app window uses one).
+- It installs `~/.local/bin/pcsc`, a menu entry in `~/.local/share/applications/`, an icon, and a login autostart entry in `~/.config/autostart/`.
 
-## 1b. CLI alternative
-`pcsc token` on Windows, `pcsc host`; on Ubuntu `pcsc join <WINDOWS_IP> --token <SECRET>`. `pcsc doctor` checks tools.
+**Uninstall (laptop):** `pkill -x pcsc; rm -f ~/.local/bin/pcsc ~/.local/share/applications/pcsconnector.desktop ~/.config/autostart/pcsconnector.desktop; sudo rm -f /etc/udev/rules.d/60-pcsconnector-uinput.rules /etc/modules-load.d/pcsconnector.conf`. Your files and pairing live in `~/PcsConnector`.
 
-## 2. Mouse + keyboard sharing (untested)
-Use a software KVM until the native version exists:
-- **Deskflow** (github.com/deskflow/deskflow, actively maintained; Input Leap is archived). Windows = server, Ubuntu = client. Place the Ubuntu screen to the right/left of the Windows screen in the layout grid.
-- X11 is much better supported on Ubuntu than Wayland. On Ubuntu login screen choose "Ubuntu on Xorg" if the client can't inject input.
-- Turn off their clipboard sharing if you use `pcsc` for it, to avoid two tools fighting.
+**Uninstall (Windows):** turn off **Start at login** in the window (or delete `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\PcsConnector`), close the app, and delete the exe. Data lives in `%USERPROFILE%\PcsConnector`. Remove the virtual monitor in Device Manager → Display adapters.
 
-## 3. Extended screen (untested)
-The app does this itself. **Set up virtual monitor** installs the bundled Virtual-Display-Driver (IddCx, signed, ~400 KB) via Windows SetupAPI; the app finds the monitor automatically. **Start extended screen** captures it (GDI) and streams JPEG frames over the encrypted channel to the laptop, which shows them fullscreen in an app window (double-click toggles fullscreen). In *Settings > Display* you can arrange the new monitor beside your main one.
+## Networking
 
-Manual fallback if the one-click install fails: install Virtual-Display-Driver yourself, then press Start. Send the Activity log if it still fails.
+- One port: **24800**, TCP (the encrypted connection, made from the laptop to the PC) and UDP (finding the PC by code, and the low-latency mouse path).
+- **Same network:** the laptop finds the PC by broadcasting a query that only a PC showing the same code can decrypt. Nothing to configure.
+- **VPN (Tailscale, ZeroTier, WireGuard):** broadcasts don't cross a VPN, so enter the PC's VPN address on the laptop (under *"PC on a different network?"*). The PC lists its addresses under *"Laptop on a different network?"*.
+- **Windows firewall:** allow PcsConnector when Windows asks. If you dismissed the prompt, allow it in *Windows Security → Firewall → Allow an app*, or run this as admin:
+  `netsh advfirewall firewall add rule name="PcsConnector" dir=in action=allow program="C:\path\to\PcsConnector.exe"`
+- **Lag:** the PC window shows the round trip to the laptop. Under about 20 ms feels local. Big spikes almost always come from Wi-Fi: congested 2.4 GHz channels, a weak signal, or Wi-Fi power saving (`iw dev <wlan> get power_save` on the laptop). Ethernet or 5 GHz is the real fix.
 
-Expect roughly 100-200 ms latency; fine for documents, chat and reference, not games. Clicks on the laptop are not forwarded to Windows yet (see Phase 3).
+## Command line
 
-## Troubleshooting
-- `join` never connects → firewall, wrong IP, or different token (wrong token silently drops the connection).
-- Clipboard doesn't sync on Ubuntu → run `doctor`; on Wayland install `wl-clipboard`.
-- Files don't send → the file must stop growing for ~1 s before it is picked up.
+`pcsc.exe` (Windows, from the release) and `pcsc` (Linux) are the same program as the app:
+
+```
+pcsc                        open the app window
+pcsc host [--port N]        run as the PC without a window
+pcsc join [ip] [--port N]   run as the laptop without a window (no ip: find the PC by code)
+pcsc doctor                 check clipboard tools, /dev/uinput access, browser
+pcsc version
+options: --token CODE  --no-clipboard      env: PCSC_TOKEN, PCSC_HOME (data folder)
+```
+
+## Extended screen
+
+**Set up virtual monitor** installs the bundled [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver) (signed, IddCx) with one Windows permission prompt; nothing is downloaded. **Start extended screen** captures that monitor and streams JPEG frames over the encrypted connection to the laptop, which shows them fullscreen (double-click toggles fullscreen). Arrange the new monitor next to your main one in *Settings → System → Display*. Expect 100–200 ms of delay: fine for documents and reference, not for games or video.
+
+## Data folders
+
+Both computers keep `config.json` (pairing), `Inbox/` (received files), `Outbox/` (anything dropped here is sent) and `Sent/` in `~/PcsConnector` (Windows: `%USERPROFILE%\PcsConnector`). Set `PCSC_HOME` to use another folder.

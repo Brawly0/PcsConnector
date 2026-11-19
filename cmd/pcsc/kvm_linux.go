@@ -22,6 +22,8 @@ type uinputDev struct {
 	heldKeys map[int]bool
 	heldBtns map[int]bool
 	failed   bool
+	lastSeq  uint64 // newest position applied; older ones (late UDP datagrams) are dropped
+	wacc     [2]int // hi-res wheel remainder (vertical, horizontal), 120 = one notch
 }
 
 var uin uinputDev
@@ -79,8 +81,10 @@ func (u *uinputDev) init() bool {
 			for _, c := range []int{272, 273, 274} {
 				uiSet(f, 0x40045565, c)
 			}
-			uiSet(f, 0x40045566, 8) // REL_WHEEL
-			uiSet(f, 0x40045566, 6) // REL_HWHEEL
+			uiSet(f, 0x40045566, 8)  // REL_WHEEL
+			uiSet(f, 0x40045566, 6)  // REL_HWHEEL
+			uiSet(f, 0x40045566, 11) // REL_WHEEL_HI_RES
+			uiSet(f, 0x40045566, 12) // REL_HWHEEL_HI_RES
 			for _, ax := range []int{0, 1} {
 				uiSet(f, 0x40045567, ax)
 				var as [28]byte
@@ -102,12 +106,25 @@ func (u *uinputDev) init() bool {
 	return false
 }
 
+// uiPending batches events per device so a whole network message costs one write per device.
+// Callers hold uin.mu and call uiFlush when done.
+var uiPending = map[*os.File][]byte{}
+
 func uiEvent(f *os.File, typ, code uint16, val int32) {
 	var b [24]byte
 	binary.LittleEndian.PutUint16(b[16:], typ)
 	binary.LittleEndian.PutUint16(b[18:], code)
 	binary.LittleEndian.PutUint32(b[20:], uint32(val))
-	f.Write(b[:])
+	uiPending[f] = append(uiPending[f], b[:]...)
+}
+
+func uiFlush() {
+	for f, b := range uiPending {
+		if len(b) > 0 {
+			f.Write(b)
+		}
+		uiPending[f] = b[:0]
+	}
 }
 
 func (u *uinputDev) releaseAll() {
@@ -122,6 +139,7 @@ func (u *uinputDev) releaseAll() {
 	}
 	uiEvent(u.kb, 0, 0, 0)
 	uiEvent(u.ms, 0, 0, 0)
+	uiFlush()
 	u.heldKeys, u.heldBtns = map[int]bool{}, map[int]bool{}
 }
 
@@ -144,6 +162,13 @@ var vkToEvdev = func() map[int]int {
 		m[112+i] = 59 + i // F1-F10
 	}
 	m[122], m[123] = 87, 88 // F11, F12
+	for i := 0; i < 12; i++ {
+		m[124+i] = 183 + i // F13-F24
+	}
+	// Print Screen, numpad 5 without NumLock, ISO <> key, volume mute/down/up, next/previous/stop/play
+	for vk, e := range map[int]int{44: 99, 12: 76, 226: 86, 173: 113, 174: 114, 175: 115, 176: 163, 177: 165, 178: 166, 179: 164} {
+		m[vk] = e
+	}
 	return m
 }()
 
@@ -157,6 +182,46 @@ func clamp01(v float64) float64 {
 	return v
 }
 
+// moveTo places the cursor if seq is newer than the last applied position (seq 0 = always, older peers).
+func (u *uinputDev) moveTo(seq uint64, x, y float64) {
+	if seq != 0 && seq <= u.lastSeq {
+		return
+	}
+	if seq != 0 {
+		u.lastSeq = seq
+	}
+	uiEvent(u.ms, 3, 0, int32(clamp01(x)*absMax))
+	uiEvent(u.ms, 3, 1, int32(clamp01(y)*absMax))
+	uiEvent(u.ms, 0, 0, 0)
+}
+
+// wheel sends a raw Windows wheel delta (120 = one notch) as hi-res scroll plus whole notches.
+func (u *uinputDev) wheel(horiz bool, d int) {
+	i, hi, lo := 0, uint16(11), uint16(8)
+	if horiz {
+		i, hi, lo = 1, 12, 6
+	}
+	uiEvent(u.ms, 2, hi, int32(d))
+	u.wacc[i] += d
+	if n := u.wacc[i] / 120; n != 0 {
+		u.wacc[i] -= n * 120
+		uiEvent(u.ms, 2, lo, int32(n))
+	}
+	uiEvent(u.ms, 0, 0, 0)
+}
+
+// kvmMove applies a move that came over the UDP fast path.
+func (a *app) kvmMove(seq uint64, x, y float64) {
+	u := &uin
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if !u.init() {
+		return
+	}
+	u.moveTo(seq, x, y)
+	uiFlush()
+}
+
 func (a *app) kvmRecv(evs []inEv) {
 	u := &uin
 	u.mu.Lock()
@@ -164,14 +229,23 @@ func (a *app) kvmRecv(evs []inEv) {
 	if !u.init() {
 		return
 	}
+	defer uiFlush()
 	btn := map[int]uint16{0: 272, 1: 274, 2: 273}
 	for _, e := range evs {
 		switch e.E {
-		case "enter", "m":
-			uiEvent(u.ms, 3, 0, int32(clamp01(e.X)*absMax))
-			uiEvent(u.ms, 3, 1, int32(clamp01(e.Y)*absMax))
-			uiEvent(u.ms, 0, 0, 0)
+		case "enter":
+			// sequence numbers start from the PC's clock, so they only go back if that clock jumped back
+			if e.S < u.lastSeq && u.lastSeq-e.S > 1<<36 {
+				u.lastSeq = 0
+			}
+			u.wacc = [2]int{}
+			u.moveTo(e.S, e.X, e.Y)
+		case "m":
+			u.moveTo(e.S, e.X, e.Y)
 		case "d", "u":
+			if e.S != 0 {
+				u.moveTo(e.S, e.X, e.Y) // only if newer than the last move: click where the cursor is
+			}
 			c := btn[e.B]
 			v := int32(0)
 			if e.E == "d" {
@@ -182,13 +256,10 @@ func (a *app) kvmRecv(evs []inEv) {
 			}
 			uiEvent(u.ms, 1, c, v)
 			uiEvent(u.ms, 0, 0, 0)
-		case "w", "h":
-			code := uint16(8)
-			if e.E == "h" {
-				code = 6
-			}
-			uiEvent(u.ms, 2, code, int32(e.D))
-			uiEvent(u.ms, 0, 0, 0)
+		case "w", "h": // older PC builds: whole notches
+			u.wheel(e.E == "h", e.D*120)
+		case "wh", "hh":
+			u.wheel(e.E == "hh", e.D)
 		case "kd", "ku":
 			code := vkToEvdev[e.K]
 			if e.K == 13 && e.B == 1 {
@@ -209,6 +280,7 @@ func (a *app) kvmRecv(evs []inEv) {
 			}
 			uiEvent(u.kb, 0, 0, 0)
 		case "leave":
+			u.lastSeq = max(u.lastSeq, e.S) // drops moves still in flight on the UDP path
 			u.releaseAll()
 		}
 	}

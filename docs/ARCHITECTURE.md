@@ -1,31 +1,47 @@
 # Architecture
 
 ```
- Windows PC (host)                          Ubuntu laptop (client)
- ┌───────────────────────┐   TCP 24800      ┌──────────────────────┐
- │ pcsc host             │◄════════════════►│ pcsc join            │
- │  clipboard · files    │  AES-GCM frames  │  clipboard · files   │
- ├───────────────────────┤                  ├──────────────────────┤
- │ virtual display + GDI ── JPEG frames ───►│ app window (fullscr) │   (Phase 3)
- │ input capture ◄──────── input events ────│ input injection      │   (Phase 2/3)
- └───────────────────────┘                  └──────────────────────┘
+ Windows PC (host)                                   Ubuntu laptop (client)
+ ┌──────────────────────────┐   TCP 24800 (AES-GCM)   ┌──────────────────────────┐
+ │ pcsc (serve)             │◄═══════════════════════►│ pcsc (dial)              │
+ │  clipboard · files       │                         │  clipboard · files       │
+ │  low-level input hooks ──┼── kvm events ──────────►│  /dev/uinput injection   │
+ │  virtual monitor + GDI ──┼── JPEG frames ─────────►│  fullscreen viewer       │
+ │                          │   UDP 24800 (AES-GCM)   │                          │
+ │  discovery answers  ◄────┼── code-sealed query ────┤  (broadcast)             │
+ │  mouse moves ────────────┼── latest position ─────►│                          │
+ └──────────────────────────┘                         └──────────────────────────┘
+ Both: local UI at http://127.0.0.1:24801 shown in an Edge/Chrome app window.
 ```
 
-## Current code (Phase 1, Go)
-- `cmd/pcsc/protocol.go` – length-prefixed frames, AES-256-GCM, key = scrypt(token).
-- `cmd/pcsc/app.go` – connection lifecycle: serve / dial (auto-reconnect), message dispatch, newest connection wins.
-- `cmd/pcsc/clipboard*.go` – Windows: user32 syscalls + `GetClipboardSequenceNumber` (no polling cost); Linux: xclip / wl-clipboard polling.
-- `cmd/pcsc/files.go` – Outbox watcher (waits for stable size) -> chunked send -> Sent; receiver writes to Inbox (basename only, never overwrites).
+One Go program per OS (stdlib plus `x/crypto/scrypt`, no cgo). Windows APIs are called through `syscall`; Linux uses `/dev/uinput` and the clipboard tools.
 
-Why Go: single static binary (~3.5 MB), ~9 MB RAM idle, no runtime on Ubuntu, cross-compiles Linux from Windows, and can call Win32 / uinput directly for the input phase.
+## Code map (`cmd/pcsc`)
 
-## Roadmap
-1. **Phase 1 (done):** secure channel, clipboard text, folder-based file transfer.
-2. **Phase 2 – input:** reuse Deskflow first (Input Leap is archived). Native replacement: capture mouse/keys on Windows (low-level hooks), send over the existing channel when the cursor crosses the screen edge, inject on Ubuntu via `uinput`/XTest. Needs a low-level keyboard/mouse hooks on Windows (`SetWindowsHookEx` via syscall) and `/dev/uinput` on Linux – both doable in Go without cgo.
-3. **Phase 3 – extended screen:** built-in GDI capture of the virtual monitor, JPEG frames over the encrypted channel (frame type 2), bundled driver installed by one click. Next: resolution negotiation, hardware encoding. Optionally forward clicks made on the laptop's stream back to the virtual monitor.
-4. **Phase 4 – polish:** richer clipboard (images, files), drag-and-drop files, TLS/pairing instead of a pasted token, tray UI, installers.
+| File | Role |
+|---|---|
+| `protocol.go` | TCP framing: `[u32 len][nonce][AES-256-GCM(type + payload)]`, key = scrypt(pairing code) |
+| `app.go` | connection lifecycle: `serve` (PC), `dial` (laptop, auto-reconnect, finds the PC by code), message dispatch |
+| `discover.go` | pairing by code: sealed UDP broadcast query, answered only by the PC with the same code |
+| `fastpath.go` | UDP fast path for mouse moves (sequence-numbered, latest wins), probes for the latency readout |
+| `kvm.go`, `kvm_windows.go`, `kvm_linux.go` | edge-crossing mouse/keyboard: Windows low-level hooks → events → uinput |
+| `clipboard*.go` | Windows: user32 and `GetClipboardSequenceNumber`; Linux: wl-clipboard / xclip |
+| `files.go` | Outbox watcher → chunked send → Sent; receiver writes to Inbox (never overwrites) |
+| `display_windows.go`, `screen.go`, `viewer.html` | GDI capture of the virtual monitor → JPEG frames → laptop viewer, input forwarded back |
+| `install_windows.go`, `vdd/` | bundled virtual display driver, installed via SetupAPI |
+| `ui.go`, `ui.html` | local UI server and the single-page app window |
+| `proc_*.go` | app window launcher, start-at-login (HKCU Run / XDG autostart) |
 
-## Known limits
-- Text-only clipboard. Large clipboards (>4 MB) are dropped by the frame limit.
-- No replay protection / forward secrecy.
-- The virtual display driver is installed with one UAC prompt; it is a third-party signed driver (Virtual-Display-Driver).
+## Design notes
+
+- **Pairing:** the 10-character code (about 50 bits) is the only secret. Both sides derive the AES key from it; a wrong code fails authentication on the first frame. Discovery queries are sealed with the same key, so only the matching PC can read one or answer it.
+- **Mouse latency:** on Wi-Fi a single lost TCP packet stalls everything behind it for a retransmit (200 ms or more). Moves are absolute positions, so they go over UDP where a lost one is simply superseded. Buttons and keys stay on TCP (ordered, reliable) and carry the position and sequence number, so a click always lands where the cursor is. The PC sends at most about 250 moves a second. If UDP is blocked, moves fall back to TCP.
+- **Edge crossing:** the PC parks its cursor in the middle of the primary screen and turns each hook event into a delta. The PC cursor is hidden while you're on the laptop: the system cursors are swapped for a blank one and restored from saved copies. Crossing straight back within 150 ms is ignored (stops edge bounce), and there is no crossing while a button is held.
+
+## Known limits / roadmap
+
+- Clipboard is text only; clipboards over 4 MB are dropped.
+- No forward secrecy or replay protection on the TCP channel yet.
+- The extended screen is a JPEG stream (100–200 ms). Hardware encoding (H.264 / Media Foundation) would cut bandwidth and delay.
+- The laptop app window must be opened once after start, so the PC learns the laptop's screen size.
+- No code signing: Windows SmartScreen warns on first run.

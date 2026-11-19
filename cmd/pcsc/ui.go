@@ -32,10 +32,11 @@ var viewerHTML []byte
 const uiAddr = "127.0.0.1:24801"
 
 type config struct {
-	Token string `json:"token,omitempty"`
-	Mode  string `json:"mode,omitempty"` // "host" | "join"
-	Host  string `json:"host,omitempty"`
-	Port  int    `json:"port,omitempty"`
+	Token       string `json:"token,omitempty"`
+	Mode        string `json:"mode,omitempty"` // "host" | "join"
+	Host        string `json:"host,omitempty"`
+	Port        int    `json:"port,omitempty"`
+	NoAutostart bool   `json:"noAutostart,omitempty"` // the user turned off start-at-login
 }
 
 func loadConfig(d dirs) config {
@@ -62,6 +63,26 @@ func newCode() string {
 		b[i] = codeAlphabet[int(b[i])%len(codeAlphabet)]
 	}
 	return string(b[:5]) + "-" + string(b[5:])
+}
+
+// checkCode explains what is wrong with a typed pairing code (already normalised by normCode).
+func checkCode(code string) error {
+	raw := strings.ReplaceAll(code, "-", "")
+	if raw == "" {
+		return fmt.Errorf("type the pairing code shown on your Windows PC")
+	}
+	for _, c := range raw {
+		if !strings.ContainsRune(codeAlphabet, c) {
+			if strings.ContainsRune("01IO", c) {
+				return fmt.Errorf("codes never contain 0, 1, I or O; check the code on the PC")
+			}
+			return fmt.Errorf("the code has a character that doesn't belong; check the code on the PC")
+		}
+	}
+	if len(raw) != 10 {
+		return fmt.Errorf("the code has 10 characters (like ABCDE-FGHJK); you typed %d", len(raw))
+	}
+	return nil
 }
 
 func normCode(s string) string {
@@ -99,9 +120,10 @@ type ui struct {
 	port int
 	ring *logRing
 
-	mu  sync.Mutex
-	a   *app
-	cfg config
+	mu        sync.Mutex
+	a         *app
+	cfg       config
+	autostart bool // cached: checking it on Windows runs reg.exe
 }
 
 func (u *ui) start(cfg config) error {
@@ -110,6 +132,7 @@ func (u *ui) start(cfg config) error {
 	if err != nil {
 		return err
 	}
+	cfg.NoAutostart = loadConfig(u.d).NoAutostart
 	u.mu.Lock()
 	u.a, u.cfg = a, cfg
 	u.mu.Unlock()
@@ -174,11 +197,13 @@ func listDir(dir string) []map[string]any {
 func (u *ui) state() map[string]any {
 	u.mu.Lock()
 	a, cfg := u.a, u.cfg
+	auto := u.autostart
 	u.mu.Unlock()
 	st := map[string]any{
 		"mode": cfg.Mode, "host": cfg.Host, "code": cfg.Token, "ips": localIPs(), "platform": runtime.GOOS,
 		"running": a != nil, "connected": false, "port": u.port, "log": u.ring.get(),
 		"vmon": vmonStatus(), "kvm": map[string]any{}, "inbox": listDir(u.d.inbox), "sent": listDir(u.d.sent), "dir": u.d.home,
+		"version": version, "autostart": auto,
 	}
 	if a != nil {
 		peer, ip := a.peerInfo()
@@ -186,6 +211,9 @@ func (u *ui) state() map[string]any {
 		st["clip"] = a.clipOn.Load()
 		st["screen"] = a.screenOn()
 		st["kvm"] = a.kvmStatus()
+		a.mu.Lock()
+		st["target"] = a.target
+		a.mu.Unlock()
 		if peer != nil {
 			st["peer"] = map[string]string{"name": peer.Name, "platform": peer.Platform, "ip": ip}
 		}
@@ -228,19 +256,33 @@ func (u *ui) handler() http.Handler {
 	mux.HandleFunc("/api/join", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ IP, Code string }
 		json.NewDecoder(r.Body).Decode(&in)
-		ip := strings.TrimSpace(in.IP)
-		if ip == "" || len(strings.ReplaceAll(in.Code, " ", "")) < 6 {
-			reply(w, fmt.Errorf("enter the Windows PC's address and the pairing code"))
+		ip := strings.TrimSpace(in.IP) // optional: without it the laptop finds the PC on the network
+		code := normCode(in.Code)
+		if err := checkCode(code); err != nil {
+			reply(w, err)
 			return
 		}
-		reply(w, u.start(config{Token: normCode(in.Code), Mode: "join", Host: ip}))
+		reply(w, u.start(config{Token: code, Mode: "join", Host: ip}))
+	})
+	mux.HandleFunc("/api/autostart", func(w http.ResponseWriter, r *http.Request) {
+		on := r.URL.Query().Get("on") == "1"
+		err := setAutostart(on)
+		c := loadConfig(u.d)
+		c.NoAutostart = !on
+		saveConfig(u.d, c)
+		now := autostartOn()
+		u.mu.Lock()
+		u.autostart = now
+		u.cfg.NoAutostart = !on
+		u.mu.Unlock()
+		reply(w, err)
 	})
 	mux.HandleFunc("/api/disconnect", func(w http.ResponseWriter, r *http.Request) {
 		u.stop()
 		u.mu.Lock()
 		u.cfg = config{}
 		u.mu.Unlock()
-		saveConfig(u.d, config{})
+		saveConfig(u.d, config{NoAutostart: loadConfig(u.d).NoAutostart})
 		reply(w, nil)
 	})
 	mux.HandleFunc("/api/clip", func(w http.ResponseWriter, r *http.Request) {
@@ -414,6 +456,15 @@ func runUI(d dirs, port int, open bool) {
 	if open {
 		openApp("http://" + uiAddr)
 	}
-	log.Printf("PcsConnector is open at http://%s", uiAddr)
+	log.Printf("PcsConnector %s is open at http://%s", version, uiAddr)
+	go func() {
+		if !loadConfig(d).NoAutostart {
+			setAutostart(true)
+		}
+		on := autostartOn()
+		u.mu.Lock()
+		u.autostart = on
+		u.mu.Unlock()
+	}()
 	log.Fatal(http.Serve(ln, u.handler()))
 }

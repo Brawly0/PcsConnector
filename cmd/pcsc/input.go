@@ -9,6 +9,7 @@ type inEv struct {
 	B int     `json:"b,omitempty"` // mouse button 0/1/2, or 1 = extended key
 	D int     `json:"d,omitempty"` // wheel delta
 	K int     `json:"k,omitempty"` // Windows virtual-key code
+	S uint64  `json:"s,omitempty"` // KVM sequence number: the laptop ignores positions older than one it applied
 }
 
 // input runs on the Windows host; events are only accepted while the extended screen is on.

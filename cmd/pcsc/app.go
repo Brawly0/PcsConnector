@@ -44,12 +44,15 @@ type app struct {
 	cur    *session
 	peer   *msg   // set once the peer's hello arrives
 	peerIP string // remote address of the current connection
+	target string // laptop: address being dialled (typed, or found on the network)
 
 	scr screenState
 
 	kvm     kvmState
 	kvmOn   atomic.Bool
 	kvmSide atomic.Int32
+
+	fast fastState // UDP fast path for mouse moves (fastpath.go)
 }
 
 func newApp(d dirs, token string, noClip bool) (*app, error) {
@@ -112,6 +115,9 @@ func (a *app) serve(port int) error {
 	a.mu.Lock()
 	a.ln = ln
 	a.mu.Unlock()
+	if c := a.fastListen(port); c != nil {
+		go a.fastHostRead(c, port) // answers laptops looking for this PC's code
+	}
 	log.Printf("Waiting for the other computer on port %d", port)
 	for {
 		c, err := ln.Accept()
@@ -125,13 +131,58 @@ func (a *app) serve(port int) error {
 	}
 }
 
-// dial connects to the host and reconnects until the app is closed.
+// dial connects to the PC and reconnects until the app is closed. With no host it finds the PC on the
+// local network by its pairing code (discover.go); with a host it still searches after repeated
+// failures, in case the PC's address changed.
 func (a *app) dial(host string, port int) {
-	addr := net.JoinHostPort(host, fmt.Sprint(port))
-	log.Printf("Connecting to %s ...", addr)
+	if c := a.fastListen(port); c != nil {
+		go a.fastLaptopRead(c)
+	}
+	auto := host == ""
+	if auto {
+		log.Print("Looking for the PC on this network...")
+	} else {
+		log.Printf("Connecting to %s ...", net.JoinHostPort(host, fmt.Sprint(port)))
+	}
+	// log every failure while it changes, then a reminder now and then so a stuck link is visible
+	lastErr, fails, lastFound := "", 0, ""
 	for !a.stopped() {
-		if c, err := net.DialTimeout("tcp", addr, 5*time.Second); err == nil {
+		target, tport := host, port
+		if auto || (fails > 0 && fails%3 == 0) {
+			if f, ok := a.discover(port, 3*time.Second); ok {
+				if f.ip != lastFound {
+					log.Printf("Found %s at %s", f.name, f.ip)
+					lastFound = f.ip
+				}
+				target, tport = f.ip, f.port
+			} else if auto {
+				fails++
+				if fails == 2 || fails%20 == 0 {
+					log.Print("No PC with this code found yet. Is PcsConnector open on the PC, on the same network? Over a VPN, enter the PC's address instead.")
+				}
+				continue // discover already waited
+			}
+		}
+		a.mu.Lock()
+		a.target = target
+		a.mu.Unlock()
+		addr := net.JoinHostPort(target, fmt.Sprint(tport))
+		c, err := net.DialTimeout("tcp", addr, 5*time.Second)
+		if err == nil {
+			if fails > 0 && !auto {
+				log.Printf("Reached %s after %d failed attempt(s)", addr, fails)
+			}
+			lastErr, fails = "", 0
 			a.handle(newSession(c, a.key))
+			if !a.stopped() {
+				log.Print("Reconnecting...")
+			}
+		} else if !a.stopped() {
+			fails++
+			if e := err.Error(); e != lastErr || fails%4 == 0 {
+				lastErr = e
+				log.Printf("Cannot reach the PC at %s (attempt %d): %v", addr, fails, err)
+			}
 		}
 		select {
 		case <-a.done:
@@ -158,6 +209,8 @@ func (a *app) handle(s *session) {
 		a.mu.Unlock()
 		s.close()
 		a.screenStop()
+		a.kvmHalt()    // host: stop capturing so the PC's mouse is never stuck on a vanished laptop
+		a.kvmRelease() // laptop: let go of any keys/buttons held when the link dropped
 		if !a.stopped() {
 			log.Print("Disconnected")
 		}
@@ -173,8 +226,15 @@ func (a *app) handle(s *session) {
 	for {
 		typ, payload, err := s.read()
 		if err != nil {
-			if err.Error() != "EOF" && !a.stopped() {
-				log.Printf("Connection problem: %v", err)
+			if !a.stopped() {
+				a.mu.Lock()
+				paired := a.peer != nil
+				a.mu.Unlock()
+				if !paired {
+					log.Printf("Connection from %s dropped before pairing (%v). The pairing codes probably differ.", a.peerIP, err)
+				} else if err.Error() != "EOF" {
+					log.Printf("Connection problem: %v", err)
+				}
 			}
 			return
 		}
@@ -194,9 +254,13 @@ func (a *app) handle(s *session) {
 		case "hello":
 			a.mu.Lock()
 			a.peer = &m
+			serving, ip := a.ln != nil, a.peerIP
 			a.mu.Unlock()
 			log.Printf("Connected to %s (%s)", m.Name, m.Platform)
 			a.sendScreenSize()
+			if serving {
+				go a.fastProbe(s, ip)
+			}
 		case "clip":
 			if a.clipOn.Load() {
 				clip.apply(m.Text)
@@ -205,6 +269,8 @@ func (a *app) handle(s *session) {
 			rx.start(m.Name)
 		case "screen-size":
 			a.kvmPeerSize(m.W, m.H)
+		case "udp-ok":
+			a.fastAck(m.Size)
 		case "kvm":
 			a.kvmRecv(m.Ev)
 		case "input":

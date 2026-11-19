@@ -23,3 +23,7 @@ desktop.ini
 
 dist/
 *.exe
+
+# local session notes and tool output
+docs/briefings/
+.playwright-mcp/

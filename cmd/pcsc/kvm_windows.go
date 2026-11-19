@@ -5,6 +5,7 @@ package main
 import (
 	"log"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -19,6 +20,12 @@ var (
 	pGetMessage    = user32.NewProc("GetMessageW")
 	pPostThreadMsg = user32.NewProc("PostThreadMessageW")
 	pSetCursorPos  = user32.NewProc("SetCursorPos")
+	pCreateCursor  = user32.NewProc("CreateCursor")
+	pCopyIcon      = user32.NewProc("CopyIcon")
+	pSetSysCursor  = user32.NewProc("SetSystemCursor")
+	pSysParamInfo  = user32.NewProc("SystemParametersInfoW")
+	pLoadCursor    = user32.NewProc("LoadCursorW")
+	pGetAsyncKey   = user32.NewProc("GetAsyncKeyState")
 	kvmCur         atomic.Pointer[kvmHost]
 	mouseCB, keyCB uintptr
 )
@@ -37,17 +44,20 @@ type kbllhook struct {
 }
 
 type kvmHost struct {
-	a       *app
-	side    int // 0 = laptop is to the right of the PC, 1 = left
-	lw, lh  float64
-	remote  bool
-	rx, ry  float64
-	cx, cy  int32
-	vx, vy  int
-	vw, vh  int
-	out     chan inEv
-	tid     uint32
-	stopped atomic.Bool
+	a        *app
+	side     int // 0 = laptop is to the right of the PC, 1 = left
+	lw, lh   float64
+	remote   bool
+	rx, ry   float64
+	cx, cy   int32
+	vx, vy   int
+	vw, vh   int
+	out      chan inEv
+	switched time.Time // last crossing; a quick crossing back is ignored so jitter at the edge cannot bounce
+	held     int       // laptop-side mouse buttons currently down (bit per button)
+	seq      uint64    // last event sequence number; only touched on the hook thread
+	tid      uint32
+	stopped  atomic.Bool
 }
 
 func init() {
@@ -69,6 +79,9 @@ func init() {
 
 func startKVMHost(a *app, lw, lh, side int) func() {
 	h := &kvmHost{a: a, side: side, lw: float64(lw), lh: float64(lh), out: make(chan inEv, 512)}
+	h.seq = uint64(time.Now().UnixNano()) // keeps rising across restarts, so the laptop never sees it go back
+	showPCCursor()
+	reloadCursors() // in case a previous run died while the cursor was hidden
 	h.vx, h.vy, h.vw, h.vh = metric(76), metric(77), metric(78), metric(79)
 	h.cx, h.cy = int32(h.vx+h.vw/2), int32(h.vy+h.vh/2)
 	for _, m := range listMonitors() {
@@ -113,32 +126,128 @@ func startKVMHost(a *app, lw, lh, side int) func() {
 		h.stopped.Store(true)
 		pPostThreadMsg.Call(uintptr(h.tid), 0x12, 0, 0) // WM_QUIT
 		close(h.out)
+		showPCCursor()
 	}
 }
 
 func (h *kvmHost) sender() {
-	for ev := range h.out {
-		batch := []inEv{ev}
-	more:
-		for len(batch) < 64 {
-			select {
-			case e, ok := <-h.out:
-				if !ok {
-					break more
-				}
-				if e.E == "m" && batch[len(batch)-1].E == "m" {
-					batch[len(batch)-1] = e // coalesce moves
-				} else {
-					batch = append(batch, e)
-				}
-			default:
-				break more
+	// Moves are capped at one per 4 ms (~250/s, well above the laptop's 60 Hz screen); the newest position
+	// wins. A gaming mouse reports 1000/s, and sending each one only queues work on the laptop and the Wi-Fi.
+	const gap = 4 * time.Millisecond
+	var pending inEv
+	var have bool
+	var last time.Time
+	t := time.NewTimer(time.Hour)
+	t.Stop()
+	flush := func() {
+		if !have {
+			return
+		}
+		have, last = false, time.Now()
+		if !h.a.fastMove(pending) {
+			if s := h.a.current(); s != nil {
+				s.send(msg{T: "kvm", Ev: []inEv{pending}})
 			}
 		}
-		if s := h.a.current(); s != nil {
-			s.send(msg{T: "kvm", Ev: batch})
+	}
+	for {
+		select {
+		case e, ok := <-h.out:
+			if !ok {
+				return
+			}
+			if e.E == "m" {
+				pending, have = e, true
+				if d := time.Since(last); d >= gap {
+					flush()
+				} else {
+					t.Reset(gap - d)
+				}
+				continue
+			}
+			flush() // a click lands after the move that preceded it
+			if s := h.a.current(); s != nil {
+				s.send(msg{T: "kvm", Ev: []inEv{e}})
+			}
+		case <-t.C:
+			flush()
 		}
 	}
+}
+
+// The PC's own cursor is hidden while input goes to the laptop, so it doesn't sit in the middle of the
+// PC screen. Hiding saves a copy of each system cursor and swaps in a blank one; showing puts the copies
+// back. Both are quick enough to run inline on the hook thread, so the cursor never flashes at the
+// parking spot and is visible the instant you come back. A couple of seconds later the user's scheme is
+// reloaded from disk as well (restores animated cursors, which copies freeze).
+var (
+	ocrIDs   = []uintptr{32512, 32513, 32514, 32515, 32516, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32650, 32651}
+	curMu    sync.Mutex
+	curSaved map[uintptr]uintptr // non-nil while hidden
+	curBlank uintptr
+	curGen   int
+)
+
+func reloadCursors() { pSysParamInfo.Call(0x57, 0, 0, 0) } // SPI_SETCURSORS
+
+func hidePCCursor() {
+	curMu.Lock()
+	defer curMu.Unlock()
+	if curSaved != nil {
+		return
+	}
+	if curBlank == 0 {
+		var and, xor [128]byte // 32x32 monochrome: AND all ones + XOR all zeros = transparent
+		for i := range and {
+			and[i] = 0xFF
+		}
+		curBlank, _, _ = pCreateCursor.Call(0, 0, 0, 32, 32, uintptr(unsafe.Pointer(&and[0])), uintptr(unsafe.Pointer(&xor[0])))
+		if curBlank == 0 {
+			return
+		}
+	}
+	saved := map[uintptr]uintptr{}
+	for _, id := range ocrIDs {
+		if c, _, _ := pLoadCursor.Call(0, id); c != 0 {
+			saved[id], _, _ = pCopyIcon.Call(c)
+		}
+		if b, _, _ := pCopyIcon.Call(curBlank); b != 0 {
+			pSetSysCursor.Call(b, id) // takes ownership of b
+		}
+	}
+	curSaved = saved
+	curGen++
+}
+
+func showPCCursor() {
+	curMu.Lock()
+	defer curMu.Unlock()
+	if curSaved == nil {
+		return
+	}
+	missing := false
+	for _, id := range ocrIDs {
+		if c := curSaved[id]; c != 0 {
+			pSetSysCursor.Call(c, id)
+		} else {
+			missing = true
+		}
+	}
+	curSaved = nil
+	curGen++
+	if missing {
+		reloadCursors()
+		return
+	}
+	gen := curGen
+	go func() {
+		time.Sleep(2 * time.Second)
+		curMu.Lock()
+		defer curMu.Unlock()
+		if curSaved == nil && curGen == gen {
+			reloadCursors()
+		}
+	}()
 }
 
 func (h *kvmHost) emit(e inEv) {
@@ -146,6 +255,8 @@ func (h *kvmHost) emit(e inEv) {
 		return
 	}
 	defer func() { recover() }() // the channel may be closed during shutdown
+	h.seq++
+	e.S = h.seq
 	if e.E == "m" {
 		select {
 		case h.out <- e:
@@ -185,23 +296,32 @@ func (h *kvmHost) enter(yFrac float64) {
 		h.rx = h.lw - 1
 	}
 	h.ry = clamp(yFrac*h.lh, 0, h.lh-1)
-	h.park()
+	h.held = 0
+	h.switched = time.Now()
 	e := h.pos()
 	e.E = "enter"
-	h.emit(e)
+	h.emit(e)      // tell the laptop first, the local cursor work below takes a moment
+	hidePCCursor() // hide before parking, so the PC cursor never flashes at the parking spot
+	h.park()
 }
 
 func (h *kvmHost) leave() {
 	h.remote = false
 	h.a.kvm.active.Store(false)
+	h.switched = time.Now()
 	h.emit(inEv{E: "leave"})
 	x := h.vx + h.vw - 2
 	if h.side == 1 {
 		x = h.vx + 1
 	}
 	y := h.vy + int(clamp(h.ry/h.lh, 0, 1)*float64(h.vh-1))
-	pSetCursorPos.Call(uintptr(x), uintptr(y))
+	pSetCursorPos.Call(uintptr(x), uintptr(y)) // put it at the edge first, then show it there
+	showPCCursor()
 }
+
+// switchGap: after crossing, crossing straight back within this time is ignored. Hand jitter right at
+// the edge otherwise flips control back and forth several times in a fraction of a second.
+const switchGap = 150 * time.Millisecond
 
 func (h *kvmHost) mouse(w uintptr, ms *msllhook) bool {
 	if ms.flags&1 != 0 { // injected
@@ -210,7 +330,7 @@ func (h *kvmHost) mouse(w uintptr, ms *msllhook) bool {
 	if !h.remote {
 		if w == 0x200 {
 			x := int(ms.x)
-			if (h.side == 0 && x >= h.vx+h.vw-1) || (h.side == 1 && x <= h.vx) {
+			if ((h.side == 0 && x >= h.vx+h.vw-1) || (h.side == 1 && x <= h.vx)) && time.Since(h.switched) >= switchGap && !pcButtonDown() {
 				h.enter(float64(int(ms.y)-h.vy) / float64(h.vh))
 				return true
 			}
@@ -226,44 +346,34 @@ func (h *kvmHost) mouse(w uintptr, ms *msllhook) bool {
 		h.park()
 		h.rx += dx
 		h.ry += dy
-		if (h.side == 0 && h.rx < 0) || (h.side == 1 && h.rx > h.lw-1) {
+		// no crossing back during the switch gap or while a button is held (dragging on the laptop)
+		if ((h.side == 0 && h.rx < 0) || (h.side == 1 && h.rx > h.lw-1)) && time.Since(h.switched) >= switchGap && h.held == 0 {
 			h.leave()
 			return true
 		}
 		h.rx, h.ry = clamp(h.rx, 0, h.lw-1), clamp(h.ry, 0, h.lh-1)
 		h.emit(h.pos())
-	case 0x201:
-		h.emit(inEv{E: "d", B: 0})
-	case 0x202:
-		h.emit(inEv{E: "u", B: 0})
-	case 0x204:
-		h.emit(inEv{E: "d", B: 2})
-	case 0x205:
-		h.emit(inEv{E: "u", B: 2})
-	case 0x207:
-		h.emit(inEv{E: "d", B: 1})
-	case 0x208:
-		h.emit(inEv{E: "u", B: 1})
+	case 0x201, 0x202, 0x204, 0x205, 0x207, 0x208:
+		// buttons carry the position too: they go over TCP while moves may take the UDP fast path,
+		// so the laptop places the cursor first if this is newer than the last move it applied
+		e := h.pos()
+		e.E = map[uintptr]string{0x201: "d", 0x202: "u", 0x204: "d", 0x205: "u", 0x207: "d", 0x208: "u"}[w]
+		e.B = map[uintptr]int{0x201: 0, 0x202: 0, 0x204: 2, 0x205: 2, 0x207: 1, 0x208: 1}[w]
+		if e.E == "d" {
+			h.held |= 1 << e.B
+		} else {
+			h.held &^= 1 << e.B
+		}
+		h.emit(e)
 	case 0x20A, 0x20E:
-		d := int(int16(ms.data >> 16))
-		n := d / 120
-		if n == 0 && d != 0 {
-			n = d / abs(d)
-		}
-		e := "w"
+		// raw wheel delta (120 = one notch) so smooth-scrolling mice and touchpads scroll smoothly
+		e := "wh"
 		if w == 0x20E {
-			e = "h"
+			e = "hh"
 		}
-		h.emit(inEv{E: e, D: n})
+		h.emit(inEv{E: e, D: int(int16(ms.data >> 16))})
 	}
 	return true
-}
-
-func abs(i int) int {
-	if i < 0 {
-		return -i
-	}
-	return i
 }
 
 func (h *kvmHost) key(w uintptr, kb *kbllhook) bool {
@@ -295,4 +405,14 @@ func (h *kvmHost) key(w uintptr, kb *kbllhook) bool {
 	}
 	h.emit(inEv{E: t, K: int(kb.vk), B: ext})
 	return true
+}
+
+// pcButtonDown: a mouse button is held on the PC (dragging), so don't hand the mouse to the laptop.
+func pcButtonDown() bool {
+	for _, vk := range []uintptr{1, 2, 4} { // VK_LBUTTON, VK_RBUTTON, VK_MBUTTON
+		if r, _, _ := pGetAsyncKey.Call(vk); r&0x8000 != 0 {
+			return true
+		}
+	}
+	return false
 }

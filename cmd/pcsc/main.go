@@ -18,9 +18,14 @@ const usage = `pcsc - PcsConnector
   pcsc                        open the app window (pairing, files, screen)
   pcsc token                  create/show the shared secret
   pcsc host [--port N]        run on the Windows PC
-  pcsc join <ip> [--port N]   run on the Ubuntu laptop
-  pcsc doctor                 check required tools
+  pcsc join [ip] [--port N]   run on the laptop (no ip: find the PC with the same code on this network)
+  pcsc background             run without opening the window (used at login)
+  pcsc doctor                 check required tools and permissions
+  pcsc version                print the build version
 options: --token T  --no-clipboard      env: PCSC_TOKEN, PCSC_HOME`
+
+// version is stamped by build.ps1 (-X main.version=...).
+var version = "dev"
 
 func homeDirs() dirs {
 	home := os.Getenv("PCSC_HOME")
@@ -69,6 +74,9 @@ func main() {
 	if tok == "" {
 		tok = readConfigToken(d)
 	}
+	if c := normCode(tok); checkCode(c) == nil {
+		tok = c // a pairing code typed in any case, with or without the dash
+	}
 	need := func() {
 		if tok == "" {
 			log.Fatal("No token. Run `pcsc token` on one machine, then pass the same value with --token on the other.")
@@ -80,6 +88,10 @@ func main() {
 		runInstallDisplay()
 	case "ui":
 		runUI(d, *port, true)
+	case "background":
+		runUI(d, *port, false)
+	case "version", "--version", "-v":
+		fmt.Println("pcsc", version)
 	case "token":
 		if tok == "" {
 			b := make([]byte, 18)
@@ -99,9 +111,6 @@ func main() {
 		log.Fatal(a.serve(*port))
 	case "join":
 		need()
-		if positional == "" {
-			log.Fatal("Usage: pcsc join <host-ip> [--token T]")
-		}
 		a, err := newApp(d, tok, *noClip)
 		if err != nil {
 			log.Fatal(err)
@@ -123,12 +132,38 @@ func doctor() {
 			need = []string{"xclip"}
 		}
 	}
-	fmt.Printf("platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-	for _, c := range need {
-		if _, err := exec.LookPath(c); err != nil {
-			fmt.Printf("MISSING %s\n", c)
+	fmt.Printf("pcsc %s  platform: %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
+	bad := false
+	report := func(ok bool, okMsg, badMsg string) {
+		if ok {
+			fmt.Printf("ok      %s\n", okMsg)
 		} else {
-			fmt.Printf("ok      %s\n", c)
+			bad = true
+			fmt.Printf("PROBLEM %s\n", badMsg)
 		}
+	}
+	for _, c := range need {
+		_, err := exec.LookPath(c)
+		report(err == nil, c, c+" is missing (clipboard sync): run install.sh")
+	}
+	if runtime.GOOS == "linux" {
+		// keyboard/mouse sharing injects through /dev/uinput
+		f, err := os.OpenFile("/dev/uinput", os.O_WRONLY, 0)
+		if f != nil {
+			f.Close()
+		}
+		report(err == nil, "/dev/uinput writable (keyboard/mouse sharing)",
+			fmt.Sprintf("/dev/uinput not writable (%v): keyboard/mouse sharing will not work. Run install.sh, or log out and in once after it", err))
+		br := ""
+		for _, b := range []string{"google-chrome", "chromium", "chromium-browser", "microsoft-edge", "brave-browser"} {
+			if _, err := exec.LookPath(b); err == nil {
+				br = b
+				break
+			}
+		}
+		report(br != "", "browser for the app window: "+br, "no Chromium-family browser: the app window opens in the default browser instead")
+	}
+	if bad {
+		os.Exit(1)
 	}
 }
