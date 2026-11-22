@@ -161,6 +161,13 @@ footer label{display:flex;gap:8px;align-items:center;cursor:pointer}
     <p class="small mut hide" id="kvm-laptop" style="margin:8px 0 0">Move the PC's mouse off the edge of its screen: it appears here, and the keyboard follows.</p>
   </div>
 
+  <div class="card" id="c-sound">
+    <div class="row sp"><div><h3>Sound</h3><div class="small mut" id="snd-sub"></div></div>
+      <label class="tg"><input type="checkbox" id="sndOn" aria-label="Play the other computer's sound here"><i></i></label></div>
+    <label class="row hide" id="sndMuteRow" style="margin-top:12px;cursor:pointer"><span class="tg"><input type="checkbox" id="sndMute" aria-label="Mute the other computer's speakers meanwhile"><i></i></span><span class="small" id="snd-mute-label"></span></label>
+    <div class="status hide" id="snd-status"><span class="dot" id="snd-dot"></span><span id="snd-st"></span></div>
+  </div>
+
   <div class="card">
     <div class="row sp"><div><h3>Clipboard</h3><div class="small mut">Copy on one computer, paste on the other</div></div>
       <label class="tg"><input type="checkbox" id="clip" aria-label="Share clipboard"><i></i></label></div>
@@ -229,6 +236,15 @@ function render(){
     if(!k.on){st='Off';dk=''}else if(k.active){st='Controlling the laptop';dk='ok'}else if(k.ready){st='Ready';dk='ok'}else{st='Waiting for the laptop window (open PcsConnector there once)';dk='wait'}
     if(k.on&&L.ms)st+=' · '+L.ms+' ms'+(+L.maxms>40?' (spikes to '+L.maxms+' ms: weak Wi-Fi?)':'')+(L.udp?'':' · slow path (UDP 24800 blocked on the laptop?)');
     $('kvm-st').textContent=st;$('kvm-dot').className='dot '+dk}
+  // sound: this side's switch plays the other computer's sound here
+  const so=S.sound||{},oth=host?'laptop':'PC',me=host?'PC':'laptop';let sst,sdk;
+  if(idle($('sndOn')))$('sndOn').checked=!!so.want;if(idle($('sndMute')))$('sndMute').checked=!!so.mute;
+  $('snd-sub').textContent='Play the '+oth+"'s sound on this "+me;
+  $('snd-mute-label').textContent='Mute the '+oth+"'s speakers meanwhile";
+  $('sndMuteRow').classList.toggle('hide',!so.want);
+  if(so.want){if(so.error){sst=so.error;sdk='bad'}else if(so.playing){sst='Playing the '+oth+"'s sound";sdk='ok'}else{sst='On · nothing is playing on the '+oth;sdk=''}}
+  else if(so.sending){sst="Sending this "+me+"'s sound to the "+oth;sdk='ok'}
+  $('snd-status').classList.toggle('hide',!sst);if(sst){$('snd-st').textContent=sst;$('snd-dot').className='dot '+(sdk==='bad'?'':sdk);$('snd-st').style.color=sdk==='bad'?'var(--bad)':''}
   if(idle($('clip')))$('clip').checked=!!S.clip;
   $('inbox').innerHTML=(S.inbox||[]).map(f=>'<li><span>'+esc(f.name)+'</span><span class="mut">'+fmt(f.size)+'</span></li>').join('')||'<li><span class="mut">Nothing yet</span><span></span></li>';
 }
@@ -292,6 +308,8 @@ function drawLayout(lo){
 const setLayout=(x,y)=>api('layout?x='+x+'&y='+y,{post:1}).then(()=>{LAY.key='';poll()});
 addEventListener('resize',()=>{LAY.key='';if(S.kvm)drawLayout(S.kvm.layout)});
 // both
+const sndSet=()=>api('sound?on='+($('sndOn').checked?1:0)+'&mute='+($('sndMute').checked?1:0),{post:1}).then(poll);
+$('sndOn').onchange=sndSet;$('sndMute').onchange=sndSet;
 $('clip').onchange=e=>api('clip?on='+(e.target.checked?1:0),{post:1});
 $('auto').onchange=e=>api('autostart?on='+(e.target.checked?1:0),{post:1}).then(poll);
 $('openIn').onclick=()=>api('open?dir=inbox',{post:1});

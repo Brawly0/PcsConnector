@@ -9,13 +9,14 @@ Move your PC's mouse off the edge of the screen and it carries on onto the lapto
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/Brawly0/PcsConnector?color=15803d"></a>
 </p>
 
-<p align="center"><img src="docs/images/how-it-works.svg" alt="A Windows PC and an Ubuntu laptop side by side: the mouse moves off the PC's screen edge onto the laptop, and the clipboard and files are shared" width="760"></p>
+<p align="center"><img src="docs/images/how-it-works.svg" alt="A Windows PC and an Ubuntu laptop side by side: the mouse moves off the PC's screen edge onto the laptop, and the clipboard, files and sound are shared" width="760"></p>
 
 ## What it does
 
 | | |
 |---|---|
 | 🖱️ **Mouse & keyboard sharing** | Push the mouse off the edge of your PC screen and it moves onto the laptop. Drag the laptop to wherever it sits on your desk: left, right, above or below any of your screens. Everything you type goes there too. Works like Input Leap or Synergy, without the setup. **Scroll Lock** switches back and forth. |
+| 🔊 **Sound** | Hear the laptop through the PC's speakers or headphones (or the other way round). The laptop's own speakers go quiet meanwhile. One switch turns it on or off. |
 | 📋 **Shared clipboard** | Copy on one computer, paste on the other. |
 | 📁 **File transfer** | Drop files into the window and they appear on the other computer. |
 
@@ -70,7 +71,7 @@ In the PC window, drag the laptop to where it sits next to your screens. Then mo
 <td valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-windows-dark.png">
-  <img src="docs/images/app-windows.png" alt="The connected PC window: a screen layout with the laptop next to the PC's screens, clipboard and files">
+  <img src="docs/images/app-windows.png" alt="The connected PC window: a screen layout with the laptop next to the PC's screens, sound, clipboard and files">
 </picture>
 </td>
 </tr>
@@ -81,6 +82,7 @@ In the PC window, drag the laptop to where it sits next to your screens. Then mo
 ## Using it
 
 - **Mouse & keyboard:** move off the edge where the laptop touches your screens (highlighted in the layout) to go to the laptop, and back to return. **Scroll Lock** jumps between them. While you're on the laptop, the PC's cursor hides. You can't cross while holding a mouse button, so dragging near the edge is safe.
+- **Sound:** turn on **Sound** in the window of the computer you want to *hear* on. On the PC that reads "Play the laptop's sound on this PC". Whatever the laptop plays then comes out of the PC, and the laptop's speakers are muted (untick "Mute the laptop's speakers meanwhile" to keep both). Turn the same switch off to stop; it remembers your choice. It works in either direction, one direction at a time. It uses about 1.5 Mbit/s while something plays, nothing when silent.
 - **Clipboard:** on by default; switch it off in the window.
 - **Files:** drop files into the window, or use *choose files*. They arrive in the other computer's `PcsConnector/Inbox` folder.
 - **Start at login** (bottom of the window): keep it on so a restart reconnects by itself.
@@ -95,6 +97,7 @@ In the PC window, drag the laptop to where it sits next to your screens. Then mo
 | The laptop says *"Looking for your PC…"* and never connects | Check that PcsConnector is open on the PC with the same code and that both are on the same network. If Windows asked about the firewall, it must be allowed. On a VPN, enter the PC's address instead. |
 | The mouse doesn't move onto the laptop | Open the PcsConnector window on the laptop once after it starts (that's how the PC learns the laptop's screen size). Check where the laptop sits in the layout on the PC. On the laptop, `pcsc doctor` should report `/dev/uinput writable`; if not, run the installer again. |
 | The PC window says *"slow path"* | The laptop's firewall blocks UDP 24800: run `sudo ufw allow 24800/udp` on the laptop. |
+| No sound from the other computer | Check that **Sound** is on in the window where you want to hear it, and that something is playing on the other computer. On the laptop, `pcsc doctor` should report `sound sharing: pw-cat` (or `pacat`). The window shows a message if a side can't play or record. |
 | The clipboard doesn't sync | Run `pcsc doctor` on the laptop. It needs `wl-clipboard` (Wayland) or `xclip` (X11), which the installer adds. |
 
 The window's **Activity log** usually says what's wrong. On the laptop there's also `/tmp/pcsc.log`. More in [docs/SETUP.md](docs/SETUP.md).
@@ -102,7 +105,7 @@ The window's **Activity log** usually says what's wrong. On the laptop there's a
 ## Requirements
 
 - **PC:** Windows 10 or 11, 64-bit. The window uses Edge, which Windows already has, or Chrome.
-- **Laptop:** Ubuntu 22.04 or newer, or another systemd-based Linux desktop. Wayland or X11, amd64 or arm64.
+- **Laptop:** Ubuntu 22.04 or newer, or another systemd-based Linux desktop. Wayland or X11, amd64 or arm64. Sound uses PipeWire (`pw-cat`) or PulseAudio (`pacat`), which Ubuntu already has.
 - **Network:** both on the same network, or connected through a VPN. Uses port 24800 (TCP and UDP).
 
 ## Privacy & security

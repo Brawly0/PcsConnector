@@ -39,7 +39,7 @@ tar xzf pcsconnector-ubuntu.tar.gz && bash pcsconnector-ubuntu/install.sh
 pcsc                        open the app window
 pcsc host [--port N]        run as the PC without a window
 pcsc join [ip] [--port N]   run as the laptop without a window (no ip: find the PC by code)
-pcsc doctor                 check clipboard tools, /dev/uinput access, browser
+pcsc doctor                 check clipboard and sound tools, /dev/uinput access, browser
 pcsc version
 options: --token CODE  --no-clipboard      env: PCSC_TOKEN, PCSC_HOME (data folder)
 ```

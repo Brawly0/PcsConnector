@@ -159,6 +159,14 @@ func doctor() {
 				break
 			}
 		}
+		snd := ""
+		for _, c := range []string{"pw-cat", "pacat"} {
+			if _, err := exec.LookPath(c); err == nil {
+				snd = c
+				break
+			}
+		}
+		report(snd != "", "sound sharing: "+snd, "no pw-cat (pipewire-bin) or pacat (pulseaudio-utils): sound sharing will not work")
 		report(br != "", "browser for the app window: "+br, "no Chromium-family browser: the app window opens in the default browser instead")
 	}
 	if bad {

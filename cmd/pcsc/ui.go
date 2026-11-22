@@ -211,6 +211,7 @@ func (u *ui) state() map[string]any {
 		st["clip"] = a.clipOn.Load()
 		st["screen"] = a.screenOn()
 		st["kvm"] = a.kvmStatus()
+		st["sound"] = a.audioStatus()
 		a.mu.Lock()
 		st["target"] = a.target
 		a.mu.Unlock()
@@ -365,6 +366,17 @@ func (u *ui) handler() http.Handler {
 			a.kvmOn.Store(r.URL.Query().Get("on") != "0")
 			a.kvmRestart()
 		}
+		reply(w, nil)
+	})
+	mux.HandleFunc("/api/sound", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		a := u.a
+		u.mu.Unlock()
+		if r.Method != http.MethodPost || a == nil {
+			reply(w, fmt.Errorf("not connected"))
+			return
+		}
+		a.audioSet(r.URL.Query().Get("on") == "1", r.URL.Query().Get("mute") != "0")
 		reply(w, nil)
 	})
 	mux.HandleFunc("/api/layout", func(w http.ResponseWriter, r *http.Request) {

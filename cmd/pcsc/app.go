@@ -22,6 +22,8 @@ type msg struct {
 	W        int    `json:"w,omitempty"`
 	H        int    `json:"h,omitempty"`
 	Ev       []inEv `json:"ev,omitempty"`
+	On       bool   `json:"on,omitempty"`
+	Mute     bool   `json:"mute,omitempty"`
 }
 
 func (s *session) send(m msg) error {
@@ -51,6 +53,8 @@ type app struct {
 	kvm   kvmState
 	kvmOn atomic.Bool
 
+	aud audioState // sound sharing (audio.go)
+
 	fast fastState // UDP fast path for mouse moves (fastpath.go)
 }
 
@@ -63,6 +67,10 @@ func newApp(d dirs, token string, noClip bool) (*app, error) {
 	a := &app{dirs: d, key: deriveKey(token), done: make(chan struct{})}
 	a.clipOn.Store(!noClip)
 	a.kvmOn.Store(true)
+	p := loadPrefs(d)
+	a.aud.want.Store(p.SoundIn)
+	a.aud.wantMute.Store(!p.SoundKeepPeer)
+	unmuteAfterCrash(d.home)
 	debug.FreeOSMemory() // hand scrypt's 16 MB scratch space back to the OS
 	go a.watchOutbox()
 	return a, nil
@@ -202,11 +210,15 @@ func (a *app) handle(s *session) {
 	}
 	defer func() {
 		a.mu.Lock()
-		if a.cur == s {
+		wasCur := a.cur == s
+		if wasCur {
 			a.cur, a.peer = nil, nil
 		}
 		a.mu.Unlock()
 		s.close()
+		if wasCur { // a replaced session must not stop the new one's sound
+			a.audioClose()
+		}
 		a.screenStop()
 		a.kvmHalt()    // host: stop capturing so the PC's mouse is never stuck on a vanished laptop
 		a.kvmRelease() // laptop: let go of any keys/buttons held when the link dropped
@@ -241,6 +253,10 @@ func (a *app) handle(s *session) {
 			a.screenFrame(payload)
 			continue
 		}
+		if typ == typAudio {
+			a.audioData(payload)
+			continue
+		}
 		if typ == typChunk {
 			rx.chunk(payload)
 			continue
@@ -257,6 +273,7 @@ func (a *app) handle(s *session) {
 			a.mu.Unlock()
 			log.Printf("Connected to %s (%s)", m.Name, m.Platform)
 			a.sendScreenSize()
+			a.audioSendWant(s)
 			if serving {
 				go a.fastProbe(s, ip)
 			}
@@ -276,6 +293,10 @@ func (a *app) handle(s *session) {
 			a.input(m.Ev)
 		case "file-end":
 			rx.end()
+		case "audio-start", "audio-stop", "audio-err":
+			a.audioMessage(m)
+		case "audio-want":
+			a.audioWant(m)
 		default:
 			a.screenMessage(s, m)
 		}

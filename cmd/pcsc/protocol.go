@@ -22,6 +22,7 @@ const (
 	typJSON  byte = 0
 	typChunk byte = 1
 	typFrame byte = 2 // JPEG screen frame
+	typAudio byte = 3 // raw 16-bit stereo PCM (audio.go)
 	maxFrame      = 4 << 20
 )
 
