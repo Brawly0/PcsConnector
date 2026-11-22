@@ -207,5 +207,5 @@ func unmuteAfterCrash(home string) {
 	comCall(vol, 14, 0, 0)
 	comRelease(vol)
 	os.Remove(muteMarker)
-	log.Print("Unmuted the PC's speakers (the app had stopped while sending sound)")
+	log.Print("Unmuted the speakers (the app had stopped while sending sound)")
 }

@@ -93,54 +93,57 @@ footer label{display:flex;gap:8px;align-items:center;cursor:pointer}
   <div class="pill"><span class="dot" id="dot"></span><span id="stat">Starting…</span></div>
 </header>
 
-<!-- Laptop, first run: type the code -->
+<!-- Entering a code: this computer will be controlled by the other one -->
 <section id="v-code" class="hide">
   <div class="card">
-    <h2>Connect to your Windows PC</h2>
-    <p class="mut">Open PcsConnector on the PC and type the code it shows.</p>
+    <h2>Enter the code</h2>
+    <p class="mut">Open PcsConnector on the other computer and type the code it shows. Its mouse and keyboard can then move onto this computer.</p>
     <input type="text" id="jcode" class="codein" placeholder="ABCDE-FGHJK" maxlength="11" autocomplete="off" spellcheck="false" aria-label="Pairing code">
     <div class="err" id="jerr"></div>
     <button class="btn wide" id="jgo">Connect</button>
-    <details style="margin-top:14px"><summary>PC on a different network (VPN, Tailscale)?</summary>
-      <div><input type="text" id="jip" placeholder="PC address, e.g. 100.101.102.103" autocomplete="off" spellcheck="false" aria-label="PC address">
-      <p class="small mut" style="margin:6px 0 0">The PC shows its addresses under "Laptop on a different network?". Leave this empty to find the PC automatically on your local network.</p></div>
+    <details style="margin-top:14px"><summary>Other computer on a different network (VPN, Tailscale)?</summary>
+      <div><input type="text" id="jip" placeholder="Its address, e.g. 100.101.102.103" autocomplete="off" spellcheck="false" aria-label="Other computer's address">
+      <p class="small mut" style="margin:6px 0 0">The other computer lists its addresses under "On a different network?". Leave this empty to find it automatically on your local network.</p></div>
     </details>
+    <p class="small mut" style="margin:14px 0 0">Should this computer show the code instead? <button class="link" id="toHost">Show a code here</button><br>The computer that shows the code shares its mouse and keyboard (that needs Windows for now).</p>
   </div>
 </section>
 
-<!-- Laptop: looking for the PC -->
+<!-- Entering a code: looking for the other computer -->
 <section id="v-search" class="hide">
   <div class="card">
-    <div class="row"><span class="spin"></span><h3 id="search-title">Looking for your PC…</h3></div>
+    <div class="row"><span class="spin"></span><h3 id="search-title">Looking for the other computer…</h3></div>
     <p class="small mut" style="margin:8px 0 0" id="search-sub"></p>
     <ul class="help hide" id="search-help">
-      <li>Is PcsConnector open on the PC, showing this code?</li>
+      <li>Is PcsConnector open on the other computer, showing this code?</li>
       <li>Are both computers on the same network (same Wi-Fi or router)?</li>
       <li>If Windows asked about the firewall, it must be allowed.</li>
-      <li>Over a VPN or Tailscale, go back and enter the PC's address.</li>
+      <li>Over a VPN or Tailscale, go back and enter the other computer's address.</li>
     </ul>
     <div class="row" style="margin-top:14px"><button class="btn ghost" id="cancel">Change code</button></div>
   </div>
 </section>
 
-<!-- PC: waiting for a laptop -->
+<!-- Showing a code: waiting for the other computer -->
 <section id="v-pair" class="hide">
   <div class="card">
-    <h2>Connect your laptop</h2>
-    <p class="mut">Use your Ubuntu laptop as an extra screen, with this PC's mouse, keyboard and clipboard.</p>
+    <h2>Connect another computer</h2>
+    <p class="mut">Move this computer's mouse and keyboard onto another PC, and share sound, the clipboard and files between them.</p>
     <ol class="steps">
-      <li><b>Install PcsConnector on the laptop</b>
-        <div class="small mut" style="margin:-4px 0 8px">Open a terminal there and run:</div>
+      <li><b>Get PcsConnector on the other computer</b>
+        <div class="small mut" style="margin:-4px 0 8px"><b style="display:inline;color:var(--ink)">Windows:</b> <a class="link" id="winDl" target="_blank" rel="noopener">download PcsConnector.exe</a> and open it.</div>
+        <div class="small mut" style="margin:0 0 8px"><b style="display:inline;color:var(--ink)">Ubuntu / Linux:</b> open a terminal and run:</div>
         <div class="cmd"><code id="installCmd"></code><button class="copy" data-copy="installCmd">Copy</button></div></li>
-      <li><b>Open it and type this code</b>
+      <li><b>Choose "Enter a code" there and type this</b>
         <div class="code" id="code">-----</div></li>
     </ol>
-    <div class="row small mut"><span class="spin"></span><span>Waiting for the laptop…</span></div>
-    <details style="margin-top:14px"><summary>Laptop on a different network?</summary>
-      <div class="small mut">The laptop finds this PC by itself on the same network. Over a VPN or Tailscale, enter one of these addresses on the laptop:
+    <div class="row small mut"><span class="spin"></span><span>Waiting for the other computer…</span></div>
+    <details style="margin-top:14px"><summary>On a different network?</summary>
+      <div class="small mut">The other computer finds this one by itself on the same network. Over a VPN or Tailscale, enter one of these addresses there:
         <div class="ips" id="ips" style="margin-top:6px"></div>
         <button class="link" id="newCode" style="margin-top:8px">Make a new code</button></div>
     </details>
+    <p class="small mut" style="margin:14px 0 0">Got a code from another computer? <button class="link" id="toJoin">Enter a code</button></p>
   </div>
 </section>
 
@@ -155,10 +158,10 @@ footer label{display:flex;gap:8px;align-items:center;cursor:pointer}
     <div class="row sp"><h3>Mouse &amp; keyboard</h3><label class="tg" id="kvmTg"><input type="checkbox" id="kvmOn" aria-label="Share mouse and keyboard"><i></i></label></div>
     <div id="kvm-pc">
       <div class="lay" id="lay" aria-label="Screen layout"></div>
-      <p class="small mut" style="margin:10px 0 0" id="lay-hint">Drag the laptop to where it sits on your desk (or select it and use the arrow keys). The mouse crosses where the screens touch. Scroll Lock switches back and forth.</p>
+      <p class="small mut" style="margin:10px 0 0" id="lay-hint">Drag the other computer's screen to where it sits on your desk (or select it and use the arrow keys). The mouse crosses where the screens touch. Scroll Lock switches back and forth.</p>
       <div class="status"><span class="dot" id="kvm-dot"></span><span id="kvm-st"></span></div>
     </div>
-    <p class="small mut hide" id="kvm-laptop" style="margin:8px 0 0">Move the PC's mouse off the edge of its screen: it appears here, and the keyboard follows.</p>
+    <p class="small mut hide" id="kvm-laptop" style="margin:8px 0 0">Move the other computer's mouse off the edge of its screen: it appears here, and the keyboard follows.</p>
   </div>
 
   <div class="card" id="c-sound">
@@ -194,7 +197,8 @@ const $=id=>document.getElementById(id);
 const api=(p,o={})=>fetch('/api/'+p,{method:o.body!==undefined||o.post?'POST':'GET',headers:{'X-PCSC':'1'},body:o.body}).then(r=>r.json().catch(()=>({})));
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(0)+' KB':(n/1048576).toFixed(1)+' MB';
-let S={},view='',autoHosted=false,searchSince=0;
+let S={},view='',autoHosted=false,wantJoin=false,searchSince=0; // wantJoin: this Windows PC enters a code instead of showing one
+$('winDl').href='https://github.com/'+REPO+'/releases/latest/download/PcsConnector.exe';
 $('installCmd').textContent='curl -fsSL https://raw.githubusercontent.com/'+REPO+'/main/install/install.sh | bash';
 
 function show(v){if(v===view)return;view=v;for(const id of['code','search','pair','dash'])$('v-'+id).classList.toggle('hide',id!==v);if(v==='code')setTimeout(()=>$('jcode').focus(),50);if(v==='search')searchSince=Date.now()}
@@ -203,21 +207,22 @@ const idle=el=>document.activeElement!==el;
 
 function render(){
   const pc=S.platform==='windows',host=S.mode==='host';
-  $('foot').classList.toggle('hide',!S.running&&pc);
+  $('foot').classList.toggle('hide',!S.running&&pc&&!wantJoin);
   if(idle($('auto')))$('auto').checked=!!S.autostart;
   $('ver').textContent=S.version||'';
   $('log').textContent=(S.log||[]).join('\n');
   if(!S.running){
-    if(pc){if(!autoHosted){autoHosted=true;api('host',{post:1}).then(poll)}setStat('Starting…','wait')}
+    if(pc&&!wantJoin){if(!autoHosted){autoHosted=true;api('host',{post:1}).then(poll)}setStat('Starting…','wait')}
     else{show('code');setStat('Not connected','')}
     $('unpairWrap').classList.add('hide');return}
+  if(S.mode==='join')wantJoin=true;
   $('unpairWrap').classList.toggle('hide',host&&!S.connected);
   if(!S.connected){
     if(host){show('pair');$('code').textContent=S.code||'-----';
       $('ips').innerHTML=(S.ips||[]).map(i=>'<span>'+esc(i)+'</span>').join('')||'<span>none found</span>';
-      setStat('Waiting for the laptop','wait')}
+      setStat('Waiting for the other computer','wait')}
     else{show('search');const t=S.target||S.host;
-      $('search-title').textContent=t?'Connecting to your PC…':'Looking for your PC…';
+      $('search-title').textContent=t?'Connecting to the other computer…':'Looking for the other computer…';
       $('search-sub').textContent='Code '+(S.code||'')+(S.host?' · address '+S.host:t?' · found at '+t:' · searching this network');
       $('search-help').classList.toggle('hide',Date.now()-searchSince<12000);
       setStat('Connecting','wait')}
@@ -233,17 +238,18 @@ function render(){
     if(idle($('kvmOn')))$('kvmOn').checked=!!k.on;
     drawLayout(k.layout);
     let st,dk;
-    if(!k.on){st='Off';dk=''}else if(k.active){st='Controlling the laptop';dk='ok'}else if(k.ready){st='Ready';dk='ok'}else{st='Waiting for the laptop window (open PcsConnector there once)';dk='wait'}
-    if(k.on&&L.ms)st+=' · '+L.ms+' ms'+(+L.maxms>40?' (spikes to '+L.maxms+' ms: weak Wi-Fi?)':'')+(L.udp?'':' · slow path (UDP 24800 blocked on the laptop?)');
+    if(k.can===false){st='Sharing this computer\'s mouse and keyboard needs Windows for now. Enter the code on this computer instead to control it from a Windows PC.';dk=''}
+    else if(!k.on){st='Off';dk=''}else if(k.active){st='Controlling '+peerShort();dk='ok'}else if(k.ready){st='Ready';dk='ok'}else{st='Waiting for the other computer\'s screen size (on Linux, open PcsConnector\'s window there once)';dk='wait'}
+    if(k.on&&L.ms)st+=' · '+L.ms+' ms'+(+L.maxms>40?' (spikes to '+L.maxms+' ms: weak Wi-Fi?)':'')+(L.udp?'':' · slow path (UDP 24800 blocked on the other computer?)');
     $('kvm-st').textContent=st;$('kvm-dot').className='dot '+dk}
   // sound: this side's switch plays the other computer's sound here
-  const so=S.sound||{},oth=host?'laptop':'PC',me=host?'PC':'laptop';let sst,sdk;
+  const so=S.sound||{};let sst,sdk;
   if(idle($('sndOn')))$('sndOn').checked=!!so.want;if(idle($('sndMute')))$('sndMute').checked=!!so.mute;
-  $('snd-sub').textContent='Play the '+oth+"'s sound on this "+me;
-  $('snd-mute-label').textContent='Mute the '+oth+"'s speakers meanwhile";
+  $('snd-sub').textContent="Play the other computer's sound here";
+  $('snd-mute-label').textContent="Mute the other computer's speakers meanwhile";
   $('sndMuteRow').classList.toggle('hide',!so.want);
-  if(so.want){if(so.error){sst=so.error;sdk='bad'}else if(so.playing){sst='Playing the '+oth+"'s sound";sdk='ok'}else{sst='On · nothing is playing on the '+oth;sdk=''}}
-  else if(so.sending){sst="Sending this "+me+"'s sound to the "+oth;sdk='ok'}
+  if(so.want){if(so.error){sst=so.error;sdk='bad'}else if(so.playing){sst='Playing the sound of '+peerShort();sdk='ok'}else{sst='On · nothing is playing on '+peerShort();sdk=''}}
+  else if(so.sending){sst='Sending this computer\'s sound to '+peerShort();sdk='ok'}
   $('snd-status').classList.toggle('hide',!sst);if(sst){$('snd-st').textContent=sst;$('snd-dot').className='dot '+(sdk==='bad'?'':sdk);$('snd-st').style.color=sdk==='bad'?'var(--bad)':''}
   if(idle($('clip')))$('clip').checked=!!S.clip;
   $('inbox').innerHTML=(S.inbox||[]).map(f=>'<li><span>'+esc(f.name)+'</span><span class="mut">'+fmt(f.size)+'</span></li>').join('')||'<li><span class="mut">Nothing yet</span><span></span></li>';
@@ -257,6 +263,10 @@ const join=async()=>{const r=await api('join',{body:JSON.stringify({IP:$('jip').
 $('jgo').onclick=join;
 [$('jcode'),$('jip')].forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter')join()}));
 $('cancel').onclick=async()=>{await api('disconnect',{post:1});poll()};
+// switch roles: show a code here (share this mouse) or enter one (be controlled)
+$('toJoin').onclick=async()=>{wantJoin=true;await api('disconnect',{post:1});poll()};
+$('toHost').onclick=async()=>{wantJoin=false;autoHosted=true;await api('host',{post:1});poll()};
+const peerShort=()=>{const n=(S.peer&&S.peer.name)||'';return n?(n.length>22?n.slice(0,20)+'…':n):'the other computer'};
 // PC
 $('newCode').onclick=async()=>{await api('host?new=1',{post:1});poll()};
 document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{navigator.clipboard.writeText($(b.dataset.copy).textContent).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1500)})});
@@ -292,7 +302,7 @@ function drawLayout(lo){
   const eb=r=>'left:'+(LAY.ox+r.X*s-2)+'px;top:'+(LAY.oy+r.Y*s-2)+'px;width:'+(r.W*s+4)+'px;height:'+(r.H*s+4)+'px';
   const focused=document.activeElement&&document.activeElement.id==='lapBox';
   el.innerHTML=M.map((m,i)=>'<div class="scr pc'+(m.Primary?' pri':'')+'" style="'+box(m)+'">'+(m.Virtual?'Virtual':'PC'+(M.length>1?' '+(i+1):''))+'</div>').join('')+edges.map(r=>'<div class="edge" style="'+eb(r)+'"></div>').join('')+
-    '<div class="scr lap'+(lo.known?'':' est')+'" id="lapBox" tabindex="0" role="button" aria-label="Laptop screen: drag it, or use the arrow keys" style="'+box(L)+'">Laptop</div>';
+    '<div class="scr lap'+(lo.known?'':' est')+'" id="lapBox" tabindex="0" role="button" aria-label="'+esc(peerShort())+' screen: drag it, or use the arrow keys" title="'+esc((S.peer&&S.peer.name)||'')+'" style="'+box(L)+'">'+esc(peerShort())+'</div>';
   const b=$('lapBox');if(focused)b.focus();
   b.onpointerdown=e=>{e.preventDefault();el.querySelectorAll('.edge').forEach(x=>x.remove());b.setPointerCapture(e.pointerId);b.classList.add('drag');LAY.drag={px:e.clientX,py:e.clientY,x:L.X,y:L.Y,nx:L.X,ny:L.Y}};
   b.onpointermove=e=>{const d=LAY.drag;if(!d)return;
@@ -316,9 +326,9 @@ $('openIn').onclick=()=>api('open?dir=inbox',{post:1});
 let unpairArmed=0;
 $('unpair').onclick=async()=>{const b=$('unpair');
   if(Date.now()-unpairArmed>3000){unpairArmed=Date.now();b.textContent='Click again to unpair';setTimeout(()=>b.textContent='Unpair',3000);return}
-  b.textContent='Unpair';await api('disconnect',{post:1});autoHosted=false;poll()};
+  b.textContent='Unpair';await api('disconnect',{post:1});autoHosted=false;wantJoin=false;poll()};
 // laptop: tell the PC this screen's size (mouse sharing needs it) right away, then every 5 s
-const repOK=()=>S.platform&&S.platform!=='windows'&&S.running;
+const repOK=()=>S.running&&S.mode==='join'; // the side that entered the code receives the mouse
 const rep=()=>api('screensize?w='+Math.round(screen.width*devicePixelRatio)+'&h='+Math.round(screen.height*devicePixelRatio),{post:1});
 let repDone=false;setInterval(()=>{if(repOK())rep()},5000);
 setInterval(()=>{if(repOK()&&!repDone){repDone=true;rep()}else if(!S.running)repDone=false},500);

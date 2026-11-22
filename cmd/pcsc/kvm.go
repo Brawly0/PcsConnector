@@ -33,10 +33,11 @@ func (a *app) kvmHalt() {
 	a.kvm.active.Store(false)
 }
 
-// kvmRestart (host) starts the hooks when the laptop is connected, has reported its size and sharing is on.
+// kvmRestart starts the hooks on the computer that shows the code (it shares its mouse and keyboard) once
+// the other one is connected and has reported its screen size. Capturing needs Windows for now.
 func (a *app) kvmRestart() {
 	a.kvmHalt()
-	if runtime.GOOS != "windows" || !a.kvmOn.Load() || a.current() == nil {
+	if runtime.GOOS != "windows" || !a.serving() || !a.kvmOn.Load() || a.current() == nil {
 		return
 	}
 	a.kvm.mu.Lock()
@@ -89,11 +90,19 @@ func (a *app) localScreen(w, h int) {
 	a.sendScreenSize()
 }
 
+// sendScreenSize: the computer that entered the code receives the mouse, so it tells the other one its
+// screen size. Windows knows it natively; on Linux the app window reports it.
 func (a *app) sendScreenSize() {
-	a.kvm.mu.Lock()
-	w, h := a.kvm.lw, a.kvm.lh
-	a.kvm.mu.Unlock()
-	if s := a.current(); s != nil && w > 0 && runtime.GOOS != "windows" {
+	if a.serving() {
+		return
+	}
+	w, h := nativeScreen()
+	if w <= 0 || h <= 0 {
+		a.kvm.mu.Lock()
+		w, h = a.kvm.lw, a.kvm.lh
+		a.kvm.mu.Unlock()
+	}
+	if s := a.current(); s != nil && w > 0 && h > 0 {
 		s.send(msg{T: "screen-size", W: w, H: h})
 	}
 }
@@ -102,7 +111,7 @@ func (a *app) kvmStatus() map[string]any {
 	a.kvm.mu.Lock()
 	ready := a.kvm.pw > 0
 	a.kvm.mu.Unlock()
-	return map[string]any{"on": a.kvmOn.Load(), "active": a.kvm.active.Load(), "ready": ready, "link": a.fastStatus(), "layout": a.kvmLayoutInfo()}
+	return map[string]any{"on": a.kvmOn.Load(), "active": a.kvm.active.Load(), "ready": ready, "link": a.fastStatus(), "layout": a.kvmLayoutInfo(), "can": runtime.GOOS == "windows"}
 }
 
 // kvmUpdateGeo (host) recomputes the crossing geometry from the monitors, the laptop size and the layout.

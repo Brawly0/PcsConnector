@@ -1,6 +1,6 @@
 # PcsConnector
 
-Use an Ubuntu laptop as an extended screen + shared input/clipboard/files for a Windows PC.
+Connect PCs (Windows and Linux) into one setup: one mouse/keyboard crossing screen edges, shared sound, clipboard and files. The computer showing the code shares its mouse (needs Windows); the one entering it is controlled (Windows or Linux).
 
 - What it is: Go tool (`cmd/pcsc`), single static binary per OS, chosen for low RAM/CPU. See README.md, docs/ARCHITECTURE.md.
 - How to run it: `./build.ps1` -> dist/. Double-click PcsConnector.exe (UI at 127.0.0.1:24801; code in cmd/pcsc/ui.go + ui.html). CLI: `pcsc host` / `pcsc join <ip> --token T`. Test: `go test ./...` (Go is at C:\Program Files\Go\bin, may need adding to PATH).

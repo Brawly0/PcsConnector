@@ -107,6 +107,13 @@ func (a *app) current() *session {
 	return a.cur
 }
 
+// serving: this computer showed the code (it listens; the other one dialled in).
+func (a *app) serving() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.ln != nil
+}
+
 func (a *app) peerInfo() (*msg, string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -147,7 +154,7 @@ func (a *app) dial(host string, port int) {
 	}
 	auto := host == ""
 	if auto {
-		log.Print("Looking for the PC on this network...")
+		log.Print("Looking for the other computer on this network...")
 	} else {
 		log.Printf("Connecting to %s ...", net.JoinHostPort(host, fmt.Sprint(port)))
 	}
@@ -165,7 +172,7 @@ func (a *app) dial(host string, port int) {
 			} else if auto {
 				fails++
 				if fails == 2 || fails%20 == 0 {
-					log.Print("No PC with this code found yet. Is PcsConnector open on the PC, on the same network? Over a VPN, enter the PC's address instead.")
+					log.Print("No computer with this code found yet. Is PcsConnector open on the other computer, on the same network? Over a VPN, enter its address instead.")
 				}
 				continue // discover already waited
 			}
@@ -188,7 +195,7 @@ func (a *app) dial(host string, port int) {
 			fails++
 			if e := err.Error(); e != lastErr || fails%4 == 0 {
 				lastErr = e
-				log.Printf("Cannot reach the PC at %s (attempt %d): %v", addr, fails, err)
+				log.Printf("Cannot reach the other computer at %s (attempt %d): %v", addr, fails, err)
 			}
 		}
 		select {

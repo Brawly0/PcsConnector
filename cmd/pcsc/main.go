@@ -17,8 +17,8 @@ import (
 const usage = `pcsc - PcsConnector
   pcsc                        open the app window (pairing, files, screen)
   pcsc token                  create/show the shared secret
-  pcsc host [--port N]        run on the Windows PC
-  pcsc join [ip] [--port N]   run on the laptop (no ip: find the PC with the same code on this network)
+  pcsc host [--port N]        show a code: this computer shares its mouse and keyboard
+  pcsc join [ip] [--port N]   enter a code: this computer is controlled (no ip: find the other one on this network)
   pcsc background             run without opening the window (used at login)
   pcsc doctor                 check required tools and permissions
   pcsc version                print the build version

@@ -102,7 +102,7 @@ func startKVMHost(a *app) func() {
 		}
 		kvmCur.Store(h)
 		ready <- true
-		log.Print("Keyboard & mouse sharing is on: push the mouse off the screen edge to control the laptop (Scroll Lock switches)")
+		log.Print("Keyboard & mouse sharing is on: push the mouse off the screen edge to control the other computer (Scroll Lock switches)")
 		var m [64]byte
 		for {
 			r, _, _ := pGetMessage.Call(uintptr(unsafe.Pointer(&m[0])), 0, 0, 0)
