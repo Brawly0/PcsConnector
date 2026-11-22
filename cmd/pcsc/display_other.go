@@ -13,7 +13,6 @@ type monitor struct {
 
 func listMonitors() []monitor         { return nil }
 func virtualMonitor() (monitor, bool) { return monitor{}, false }
-func hasVirtualDriver() bool          { return false }
 
 type grabber struct{}
 
@@ -24,6 +23,5 @@ func (g *grabber) grab(buf []byte) bool { return false }
 func (g *grabber) close()               {}
 
 func placeMonitor(m monitor, w, h int) bool { return false }
-func virtualCount() int                     { return 0 }
 
 func monitorByName(name string) (monitor, bool) { return monitor{}, false }

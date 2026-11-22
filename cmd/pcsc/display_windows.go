@@ -99,15 +99,6 @@ func virtualMonitor() (monitor, bool) {
 	return best, found
 }
 
-func hasVirtualDriver() bool {
-	for _, m := range listMonitors() {
-		if m.Virtual {
-			return true
-		}
-	}
-	return false
-}
-
 type grabber struct {
 	x, y, w, h int
 	dc, mem    uintptr
@@ -244,14 +235,4 @@ func placeMonitor(m monitor, w, h int) bool {
 	pChangeDisplaySettingsExW.Call(uintptr(unsafe.Pointer(name)), uintptr(unsafe.Pointer(&dm[0])), 0, updateRegistry|noReset, 0)
 	pChangeDisplaySettingsExW.Call(0, 0, 0, 0, 0) // apply
 	return true
-}
-
-func virtualCount() int {
-	n := 0
-	for _, m := range listMonitors() {
-		if m.Virtual {
-			n++
-		}
-	}
-	return n
 }

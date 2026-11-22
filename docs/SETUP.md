@@ -20,7 +20,7 @@ tar xzf pcsconnector-ubuntu.tar.gz && bash pcsconnector-ubuntu/install.sh
 
 **Uninstall (laptop):** `pkill -x pcsc; rm -f ~/.local/bin/pcsc ~/.local/share/applications/pcsconnector.desktop ~/.config/autostart/pcsconnector.desktop; sudo rm -f /etc/udev/rules.d/60-pcsconnector-uinput.rules /etc/modules-load.d/pcsconnector.conf`. Your files and pairing live in `~/PcsConnector`.
 
-**Uninstall (Windows):** turn off **Start at login** in the window (or delete `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\PcsConnector`), close the app, and delete the exe. Data lives in `%USERPROFILE%\PcsConnector`. Remove the virtual monitor in Device Manager → Display adapters.
+**Uninstall (Windows):** turn off **Start at login** in the window (or delete `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\PcsConnector`), close the app, and delete the exe. Data lives in `%USERPROFILE%\PcsConnector`.
 
 ## Networking
 
@@ -43,10 +43,6 @@ pcsc doctor                 check clipboard tools, /dev/uinput access, browser
 pcsc version
 options: --token CODE  --no-clipboard      env: PCSC_TOKEN, PCSC_HOME (data folder)
 ```
-
-## Extended screen
-
-**Set up virtual monitor** installs the bundled [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver) (signed, IddCx) with one Windows permission prompt; nothing is downloaded. **Start extended screen** captures that monitor and streams JPEG frames over the encrypted connection to the laptop, which shows them fullscreen (double-click toggles fullscreen). Arrange the new monitor next to your main one in *Settings → System → Display*. Expect 100–200 ms of delay: fine for documents and reference, not for games or video.
 
 ## Data folders
 

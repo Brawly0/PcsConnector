@@ -2,4 +2,4 @@
 
 package main
 
-func startKVMHost(a *app, w, h, side int) func() { return nil }
+func startKVMHost(a *app) func() { return nil }

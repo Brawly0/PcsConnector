@@ -45,13 +45,10 @@ type kbllhook struct {
 
 type kvmHost struct {
 	a        *app
-	side     int // 0 = laptop is to the right of the PC, 1 = left
 	lw, lh   float64
 	remote   bool
 	rx, ry   float64
 	cx, cy   int32
-	vx, vy   int
-	vw, vh   int
 	out      chan inEv
 	switched time.Time // last crossing; a quick crossing back is ignored so jitter at the edge cannot bounce
 	held     int       // laptop-side mouse buttons currently down (bit per button)
@@ -77,13 +74,13 @@ func init() {
 	})
 }
 
-func startKVMHost(a *app, lw, lh, side int) func() {
-	h := &kvmHost{a: a, side: side, lw: float64(lw), lh: float64(lh), out: make(chan inEv, 512)}
+func startKVMHost(a *app) func() {
+	h := &kvmHost{a: a, out: make(chan inEv, 512)}
 	h.seq = uint64(time.Now().UnixNano()) // keeps rising across restarts, so the laptop never sees it go back
 	showPCCursor()
 	reloadCursors() // in case a previous run died while the cursor was hidden
-	h.vx, h.vy, h.vw, h.vh = metric(76), metric(77), metric(78), metric(79)
-	h.cx, h.cy = int32(h.vx+h.vw/2), int32(h.vy+h.vh/2)
+	vx, vy, vw, vh := metric(76), metric(77), metric(78), metric(79)
+	h.cx, h.cy = int32(vx+vw/2), int32(vy+vh/2)
 	for _, m := range listMonitors() {
 		if m.Primary {
 			h.cx, h.cy = int32(m.X+m.W/2), int32(m.Y+m.H/2)
@@ -286,16 +283,20 @@ func (h *kvmHost) pos() inEv {
 	return inEv{E: "m", X: h.rx / h.lw, Y: h.ry / h.lh}
 }
 
-// enter hands control to the laptop, entering at the edge facing the PC.
-func (h *kvmHost) enter(yFrac float64) {
+// useGeo picks up the current layout (it can change while sharing runs). Hook thread only.
+func (h *kvmHost) useGeo() *geo {
+	g := h.a.kvm.geo.Load()
+	if g != nil {
+		h.lw, h.lh = float64(g.L.W), float64(g.L.H)
+	}
+	return g
+}
+
+// enter hands control to the laptop, with its cursor at (lx, ly) in laptop pixels.
+func (h *kvmHost) enter(lx, ly float64) {
 	h.remote = true
 	h.a.kvm.active.Store(true)
-	if h.side == 0 {
-		h.rx = 0
-	} else {
-		h.rx = h.lw - 1
-	}
-	h.ry = clamp(yFrac*h.lh, 0, h.lh-1)
+	h.rx, h.ry = clamp(lx, 0, h.lw-1), clamp(ly, 0, h.lh-1)
 	h.held = 0
 	h.switched = time.Now()
 	e := h.pos()
@@ -305,16 +306,12 @@ func (h *kvmHost) enter(yFrac float64) {
 	h.park()
 }
 
-func (h *kvmHost) leave() {
+// leave hands control back to the PC, with its cursor at (x, y).
+func (h *kvmHost) leave(x, y int) {
 	h.remote = false
 	h.a.kvm.active.Store(false)
 	h.switched = time.Now()
 	h.emit(inEv{E: "leave"})
-	x := h.vx + h.vw - 2
-	if h.side == 1 {
-		x = h.vx + 1
-	}
-	y := h.vy + int(clamp(h.ry/h.lh, 0, 1)*float64(h.vh-1))
 	pSetCursorPos.Call(uintptr(x), uintptr(y)) // put it at the edge first, then show it there
 	showPCCursor()
 }
@@ -329,10 +326,11 @@ func (h *kvmHost) mouse(w uintptr, ms *msllhook) bool {
 	}
 	if !h.remote {
 		if w == 0x200 {
-			x := int(ms.x)
-			if ((h.side == 0 && x >= h.vx+h.vw-1) || (h.side == 1 && x <= h.vx)) && time.Since(h.switched) >= switchGap && !pcButtonDown() {
-				h.enter(float64(int(ms.y)-h.vy) / float64(h.vh))
-				return true
+			if g := h.useGeo(); g != nil && time.Since(h.switched) >= switchGap {
+				if lx, ly, ok := g.enterAt(int(ms.x), int(ms.y)); ok && !pcButtonDown() {
+					h.enter(lx, ly)
+					return true
+				}
 			}
 		}
 		return false
@@ -347,9 +345,11 @@ func (h *kvmHost) mouse(w uintptr, ms *msllhook) bool {
 		h.rx += dx
 		h.ry += dy
 		// no crossing back during the switch gap or while a button is held (dragging on the laptop)
-		if ((h.side == 0 && h.rx < 0) || (h.side == 1 && h.rx > h.lw-1)) && time.Since(h.switched) >= switchGap && h.held == 0 {
-			h.leave()
-			return true
+		if g := h.useGeo(); g != nil && time.Since(h.switched) >= switchGap && h.held == 0 {
+			if x, y, ok := g.leaveAt(h.rx, h.ry); ok {
+				h.leave(x, y)
+				return true
+			}
 		}
 		h.rx, h.ry = clamp(h.rx, 0, h.lw-1), clamp(h.ry, 0, h.lh-1)
 		h.emit(h.pos())
@@ -384,10 +384,9 @@ func (h *kvmHost) key(w uintptr, kb *kbllhook) bool {
 	if kb.vk == 145 { // Scroll Lock switches between the PC and the laptop
 		if down {
 			if h.remote {
-				h.ry = h.lh / 2
-				h.leave()
-			} else {
-				h.enter(0.5)
+				h.leave(int(h.cx), int(h.cy))
+			} else if h.useGeo() != nil {
+				h.enter(h.lw/2, h.lh/2)
 			}
 		}
 		return true

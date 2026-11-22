@@ -48,9 +48,8 @@ type app struct {
 
 	scr screenState
 
-	kvm     kvmState
-	kvmOn   atomic.Bool
-	kvmSide atomic.Int32
+	kvm   kvmState
+	kvmOn atomic.Bool
 
 	fast fastState // UDP fast path for mouse moves (fastpath.go)
 }

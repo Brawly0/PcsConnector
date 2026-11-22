@@ -84,8 +84,6 @@ func main() {
 	}
 
 	switch cmd {
-	case "install-display":
-		runInstallDisplay()
 	case "ui":
 		runUI(d, *port, true)
 	case "background":

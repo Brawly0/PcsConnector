@@ -8,14 +8,18 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type kvmState struct {
 	mu     sync.Mutex
 	stop   func()
-	active atomic.Bool // input currently goes to the laptop
-	pw, ph int         // host: laptop screen size
-	lw, lh int         // laptop: own screen size
+	active atomic.Bool         // input currently goes to the laptop
+	pw, ph int                 // host: laptop screen size
+	lw, lh int                 // laptop: own screen size
+	layout savedLayout         // host: where the user put the laptop screen
+	loaded bool                // layout read from disk
+	geo    atomic.Pointer[geo] // host: current crossing geometry, read by the hook thread
 }
 
 func (a *app) kvmHalt() {
@@ -41,9 +45,27 @@ func (a *app) kvmRestart() {
 	if w <= 0 || h <= 0 {
 		return
 	}
-	stop := startKVMHost(a, w, h, int(a.kvmSide.Load()))
+	a.kvmUpdateGeo()
+	stop := startKVMHost(a)
+	if stop == nil {
+		return
+	}
+	// monitors come and go (the extended screen adds one), so refresh the geometry now and then
+	quit := make(chan struct{})
+	go func() {
+		t := time.NewTicker(2 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-quit:
+				return
+			case <-t.C:
+				a.kvmUpdateGeo()
+			}
+		}
+	}()
 	a.kvm.mu.Lock()
-	a.kvm.stop = stop
+	a.kvm.stop = func() { close(quit); stop() }
 	a.kvm.mu.Unlock()
 }
 
@@ -80,5 +102,71 @@ func (a *app) kvmStatus() map[string]any {
 	a.kvm.mu.Lock()
 	ready := a.kvm.pw > 0
 	a.kvm.mu.Unlock()
-	return map[string]any{"on": a.kvmOn.Load(), "side": a.kvmSide.Load(), "active": a.kvm.active.Load(), "ready": ready, "link": a.fastStatus()}
+	return map[string]any{"on": a.kvmOn.Load(), "active": a.kvm.active.Load(), "ready": ready, "link": a.fastStatus(), "layout": a.kvmLayoutInfo()}
+}
+
+// kvmUpdateGeo (host) recomputes the crossing geometry from the monitors, the laptop size and the layout.
+func (a *app) kvmUpdateGeo() {
+	mons := rects(layoutMonitors(a.screenOn()))
+	a.kvm.mu.Lock()
+	if !a.kvm.loaded {
+		a.kvm.layout, a.kvm.loaded = loadLayout(a.dirs), true
+	}
+	w, h, l := a.kvm.pw, a.kvm.ph, a.kvm.layout
+	a.kvm.mu.Unlock()
+	if w <= 0 || h <= 0 || len(mons) == 0 {
+		return
+	}
+	g := makeGeo(mons, w, h, l)
+	if old := a.kvm.geo.Load(); old == nil || !sameGeo(old, &g) {
+		a.kvm.geo.Store(&g)
+	}
+}
+
+func sameGeo(a, b *geo) bool {
+	if a.L != b.L || len(a.mons) != len(b.mons) {
+		return false
+	}
+	for i := range a.mons {
+		if a.mons[i] != b.mons[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// kvmSetLayout (host) saves where the user dropped the laptop screen (PC desktop coordinates). It is
+// snapped to the nearest monitor edge; the running capture picks it up at once.
+func (a *app) kvmSetLayout(x, y int) {
+	mons := rects(layoutMonitors(a.screenOn()))
+	a.kvm.mu.Lock()
+	w, h := a.kvm.pw, a.kvm.ph
+	if w <= 0 || h <= 0 {
+		w, h = 1920, 1080
+	}
+	x, y = snapLayout(mons, w, h, x, y, 0)
+	a.kvm.layout, a.kvm.loaded = savedLayout{X: x, Y: y, Set: true}, true
+	a.kvm.mu.Unlock()
+	saveLayout(a.dirs, savedLayout{X: x, Y: y, Set: true})
+	a.kvmUpdateGeo()
+}
+
+// kvmLayoutInfo (host) is what the UI's layout editor draws.
+func (a *app) kvmLayoutInfo() map[string]any {
+	mons := layoutMonitors(a.screenOn())
+	if len(mons) == 0 {
+		return nil
+	}
+	a.kvm.mu.Lock()
+	if !a.kvm.loaded {
+		a.kvm.layout, a.kvm.loaded = loadLayout(a.dirs), true
+	}
+	w, h, l := a.kvm.pw, a.kvm.ph, a.kvm.layout
+	a.kvm.mu.Unlock()
+	known := w > 0 && h > 0
+	if !known {
+		w, h = 1920, 1080 // placeholder until the laptop reports its size
+	}
+	g := makeGeo(rects(mons), w, h, l)
+	return map[string]any{"mons": mons, "laptop": g.L, "known": known}
 }

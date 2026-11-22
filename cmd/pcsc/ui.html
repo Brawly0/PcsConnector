@@ -62,9 +62,15 @@ details>div{margin-top:10px}
 .tg i:after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px #0003}
 .tg input:checked+i{background:var(--ok)}.tg input:checked+i:after{left:21px}
 .tg input:focus-visible+i{outline:2px solid var(--acc);outline-offset:2px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.seg button{border:0;background:transparent;color:var(--ink);padding:6px 14px;font-size:14px}
-.seg button.on{background:var(--acc);color:var(--acc-ink);font-weight:600}
+.lay{position:relative;height:220px;margin-top:12px;background:var(--bg);border:1px solid var(--line);border-radius:12px;overflow:hidden;touch-action:none;user-select:none}
+.scr{position:absolute;display:grid;place-items:center;border-radius:5px;font-size:12px;font-weight:600;text-align:center;line-height:1.2;overflow:hidden}
+.scr.pc{background:var(--card);border:2px solid var(--line);color:var(--mut)}
+.scr.pc.pri{border-color:var(--mut);color:var(--ink)}
+.scr.lap{background:var(--soft);border:2px solid var(--acc);color:var(--acc);cursor:grab;z-index:2;box-shadow:0 2px 8px #0002}
+.scr.lap.drag{cursor:grabbing;opacity:.85}
+.scr.lap:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+.scr.lap.est{border-style:dashed}
+.edge{position:absolute;background:var(--acc);border-radius:3px;z-index:3;pointer-events:none}
 .status{font-size:13px;margin-top:10px;display:flex;align-items:center;gap:7px}
 .status .dot{width:7px;height:7px}
 .drop{border:2px dashed var(--line);border-radius:12px;padding:20px;text-align:center;color:var(--mut);transition:.15s;font-size:14px}
@@ -148,18 +154,11 @@ footer label{display:flex;gap:8px;align-items:center;cursor:pointer}
   <div class="card" id="c-kvm">
     <div class="row sp"><h3>Mouse &amp; keyboard</h3><label class="tg" id="kvmTg"><input type="checkbox" id="kvmOn" aria-label="Share mouse and keyboard"><i></i></label></div>
     <div id="kvm-pc">
-      <div class="row" style="margin-top:12px;flex-wrap:wrap"><span class="small mut">The laptop is to the</span>
-        <div class="seg" role="group" aria-label="Laptop side"><button data-side="left">◀ Left</button><button data-side="right">Right ▶</button></div></div>
-      <p class="small mut" style="margin:10px 0 0">Move the mouse off that edge to control the laptop. Scroll Lock switches back and forth.</p>
+      <div class="lay" id="lay" aria-label="Screen layout"></div>
+      <p class="small mut" style="margin:10px 0 0" id="lay-hint">Drag the laptop to where it sits on your desk (or select it and use the arrow keys). The mouse crosses where the screens touch. Scroll Lock switches back and forth.</p>
       <div class="status"><span class="dot" id="kvm-dot"></span><span id="kvm-st"></span></div>
     </div>
     <p class="small mut hide" id="kvm-laptop" style="margin:8px 0 0">Move the PC's mouse off the edge of its screen: it appears here, and the keyboard follows.</p>
-  </div>
-
-  <div class="card" id="c-screen">
-    <h3>Extended screen</h3>
-    <p class="small mut" style="margin:6px 0 12px" id="scr-hint"></p>
-    <div class="row"><button class="btn" id="scrBtn">Start extended screen</button><span class="err" id="serr" style="margin:0"></span></div>
   </div>
 
   <div class="card">
@@ -225,17 +224,11 @@ function render(){
   $('kvm-pc').classList.toggle('hide',!host);$('kvm-laptop').classList.toggle('hide',host);$('kvmTg').classList.toggle('hide',!host);
   if(host){
     if(idle($('kvmOn')))$('kvmOn').checked=!!k.on;
-    document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',(b.dataset.side==='left')===!!k.side));
+    drawLayout(k.layout);
     let st,dk;
     if(!k.on){st='Off';dk=''}else if(k.active){st='Controlling the laptop';dk='ok'}else if(k.ready){st='Ready';dk='ok'}else{st='Waiting for the laptop window (open PcsConnector there once)';dk='wait'}
     if(k.on&&L.ms)st+=' · '+L.ms+' ms'+(+L.maxms>40?' (spikes to '+L.maxms+' ms: weak Wi-Fi?)':'')+(L.udp?'':' · slow path (UDP 24800 blocked on the laptop?)');
     $('kvm-st').textContent=st;$('kvm-dot').className='dot '+dk}
-  // extended screen (PC only)
-  $('c-screen').classList.toggle('hide',!host);
-  if(host){const vm=S.vmon||{},ready=vm.installed&&!vm.extra,on=!!S.screen,b=$('scrBtn');
-    b.textContent=ready?(on?'Stop extended screen':'Start extended screen'):(vm.extra?'Remove extra virtual monitor':'Set up virtual monitor');
-    b.dataset.on=on?1:0;b.dataset.vm=ready?1:0;
-    $('scr-hint').textContent=ready?'Shows a second Windows monitor on the laptop, fullscreen. Best for documents and reference; video lags a little.':vm.extra?'There is a duplicate virtual monitor. One click removes it (Windows asks permission once).':'Adds a virtual monitor to Windows for the laptop to show. One click; Windows asks permission once.'}
   if(idle($('clip')))$('clip').checked=!!S.clip;
   $('inbox').innerHTML=(S.inbox||[]).map(f=>'<li><span>'+esc(f.name)+'</span><span class="mut">'+fmt(f.size)+'</span></li>').join('')||'<li><span class="mut">Nothing yet</span><span></span></li>';
 }
@@ -251,12 +244,53 @@ $('cancel').onclick=async()=>{await api('disconnect',{post:1});poll()};
 // PC
 $('newCode').onclick=async()=>{await api('host?new=1',{post:1});poll()};
 document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{navigator.clipboard.writeText($(b.dataset.copy).textContent).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1500)})});
-const kvmSet=(side)=>api('kvm?on='+($('kvmOn').checked?1:0)+'&side='+(side||(S.kvm&&S.kvm.side?'left':'right')),{post:1}).then(poll);
-$('kvmOn').onchange=()=>kvmSet();
-document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>kvmSet(b.dataset.side));
-$('scrBtn').onclick=async e=>{const b=e.target;$('serr').textContent='';
-  if(b.dataset.vm!=='1'){b.disabled=true;b.textContent='Working…';const r=await api('vmon/install',{post:1});b.disabled=false;$('serr').textContent=r.error||'';poll();return}
-  const r=await api('screen?on='+(b.dataset.on==='1'?0:1),{post:1});$('serr').textContent=r.error||'';poll()};
+$('kvmOn').onchange=()=>api('kvm?on='+($('kvmOn').checked?1:0),{post:1}).then(poll);
+// screen layout editor: PC monitors and the laptop in PC desktop pixels, scaled to fit the box
+const LAY={drag:null,key:''};
+function snapJS(mons,w,h,x,y,pull){ // same rules as snapLayout in layout.go
+  const ov=(a,b)=>a.X<b.X+b.W&&b.X<a.X+a.W&&a.Y<b.Y+b.H&&b.Y<a.Y+a.H;
+  const align=(v,size,lo,len)=>{const t=Math.min(120,size,len);v=Math.max(lo-size+t,Math.min(v,lo+len-t));
+    for(const s of[lo,lo+len-size,lo+Math.trunc((len-size)/2)])if(Math.abs(v-s)<=pull)return s;return v};
+  let best=-1,bx=x,by=y;
+  for(const m of mons){const ay=align(y,h,m.Y,m.H),ax=align(x,w,m.X,m.W);
+    for(const[cx,cy]of[[m.X+m.W,ay],[m.X-w,ay],[ax,m.Y-h],[ax,m.Y+m.H]]){
+      if(mons.some(o=>ov({X:cx,Y:cy,W:w,H:h},o)))continue;
+      const d=(cx-x)**2+(cy-y)**2;if(best<0||d<best){best=d;bx=cx;by=cy}}}
+  return[bx,by]}
+function drawLayout(lo){
+  const el=$('lay');
+  el.classList.toggle('hide',!lo||!lo.mons);
+  if(!lo||!lo.mons||LAY.drag)return;
+  const key=JSON.stringify(lo)+'|'+el.clientWidth;if(key===LAY.key)return;LAY.key=key;LAY.lo=lo;
+  const L=lo.laptop,M=lo.mons;
+  // padded by the laptop's size on every side, so the scale doesn't change while it is dragged around
+  const x0=Math.min(...M.map(m=>m.X))-L.W,y0=Math.min(...M.map(m=>m.Y))-L.H,x1=Math.max(...M.map(m=>m.X+m.W))+L.W,y1=Math.max(...M.map(m=>m.Y+m.H))+L.H;
+  const s=Math.min((el.clientWidth-16)/(x1-x0),(el.clientHeight-16)/(y1-y0));
+  LAY.s=s;LAY.ox=(el.clientWidth-(x1-x0)*s)/2-x0*s;LAY.oy=(el.clientHeight-(y1-y0)*s)/2-y0*s;
+  const box=r=>'left:'+(LAY.ox+r.X*s)+'px;top:'+(LAY.oy+r.Y*s)+'px;width:'+r.W*s+'px;height:'+r.H*s+'px';
+  // accent lines where the screens touch: that is where the mouse crosses
+  const edges=[];for(const m of M){
+    const oy0=Math.max(m.Y,L.Y),oy1=Math.min(m.Y+m.H,L.Y+L.H),ox0=Math.max(m.X,L.X),ox1=Math.min(m.X+m.W,L.X+L.W);
+    if(oy1>oy0&&(L.X===m.X+m.W||L.X+L.W===m.X))edges.push({X:L.X===m.X+m.W?L.X:m.X,Y:oy0,W:0,H:oy1-oy0});
+    if(ox1>ox0&&(L.Y===m.Y+m.H||L.Y+L.H===m.Y))edges.push({X:ox0,Y:L.Y===m.Y+m.H?L.Y:m.Y,W:ox1-ox0,H:0})}
+  const eb=r=>'left:'+(LAY.ox+r.X*s-2)+'px;top:'+(LAY.oy+r.Y*s-2)+'px;width:'+(r.W*s+4)+'px;height:'+(r.H*s+4)+'px';
+  const focused=document.activeElement&&document.activeElement.id==='lapBox';
+  el.innerHTML=M.map((m,i)=>'<div class="scr pc'+(m.Primary?' pri':'')+'" style="'+box(m)+'">'+(m.Virtual?'Virtual':'PC'+(M.length>1?' '+(i+1):''))+'</div>').join('')+edges.map(r=>'<div class="edge" style="'+eb(r)+'"></div>').join('')+
+    '<div class="scr lap'+(lo.known?'':' est')+'" id="lapBox" tabindex="0" role="button" aria-label="Laptop screen: drag it, or use the arrow keys" style="'+box(L)+'">Laptop</div>';
+  const b=$('lapBox');if(focused)b.focus();
+  b.onpointerdown=e=>{e.preventDefault();el.querySelectorAll('.edge').forEach(x=>x.remove());b.setPointerCapture(e.pointerId);b.classList.add('drag');LAY.drag={px:e.clientX,py:e.clientY,x:L.X,y:L.Y,nx:L.X,ny:L.Y}};
+  b.onpointermove=e=>{const d=LAY.drag;if(!d)return;
+    [d.nx,d.ny]=snapJS(M,L.W,L.H,Math.round(d.x+(e.clientX-d.px)/s),Math.round(d.y+(e.clientY-d.py)/s),12/s);
+    b.style.left=(LAY.ox+d.nx*s)+'px';b.style.top=(LAY.oy+d.ny*s)+'px'};
+  b.onpointerup=b.onpointercancel=()=>{const d=LAY.drag;if(!d)return;LAY.drag=null;b.classList.remove('drag');
+    if(d.nx!==d.x||d.ny!==d.y)setLayout(d.nx,d.ny);else{LAY.key='';drawLayout(LAY.lo)}};
+  b.onkeydown=e=>{const m=M.find(m=>m.Primary)||M[0];
+    const t={ArrowRight:[m.X+m.W,m.Y+Math.trunc((m.H-L.H)/2)],ArrowLeft:[m.X-L.W,m.Y+Math.trunc((m.H-L.H)/2)],
+      ArrowUp:[m.X+Math.trunc((m.W-L.W)/2),m.Y-L.H],ArrowDown:[m.X+Math.trunc((m.W-L.W)/2),m.Y+m.H]}[e.key];
+    if(!t)return;e.preventDefault();setLayout(...snapJS(M,L.W,L.H,t[0],t[1],0))};
+}
+const setLayout=(x,y)=>api('layout?x='+x+'&y='+y,{post:1}).then(()=>{LAY.key='';poll()});
+addEventListener('resize',()=>{LAY.key='';if(S.kvm)drawLayout(S.kvm.layout)});
 // both
 $('clip').onchange=e=>api('clip?on='+(e.target.checked?1:0),{post:1});
 $('auto').onchange=e=>api('autostart?on='+(e.target.checked?1:0),{post:1}).then(poll);

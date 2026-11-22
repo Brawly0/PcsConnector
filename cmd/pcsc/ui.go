@@ -202,7 +202,7 @@ func (u *ui) state() map[string]any {
 	st := map[string]any{
 		"mode": cfg.Mode, "host": cfg.Host, "code": cfg.Token, "ips": localIPs(), "platform": runtime.GOOS,
 		"running": a != nil, "connected": false, "port": u.port, "log": u.ring.get(),
-		"vmon": vmonStatus(), "kvm": map[string]any{}, "inbox": listDir(u.d.inbox), "sent": listDir(u.d.sent), "dir": u.d.home,
+		"kvm": map[string]any{}, "inbox": listDir(u.d.inbox), "sent": listDir(u.d.sent), "dir": u.d.home,
 		"version": version, "autostart": auto,
 	}
 	if a != nil {
@@ -363,13 +363,22 @@ func (u *ui) handler() http.Handler {
 		u.mu.Unlock()
 		if a != nil {
 			a.kvmOn.Store(r.URL.Query().Get("on") != "0")
-			if r.URL.Query().Get("side") == "left" {
-				a.kvmSide.Store(1)
-			} else {
-				a.kvmSide.Store(0)
-			}
 			a.kvmRestart()
 		}
+		reply(w, nil)
+	})
+	mux.HandleFunc("/api/layout", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		a := u.a
+		u.mu.Unlock()
+		var x, y int
+		_, e1 := fmt.Sscan(r.URL.Query().Get("x"), &x)
+		_, e2 := fmt.Sscan(r.URL.Query().Get("y"), &y)
+		if r.Method != http.MethodPost || a == nil || e1 != nil || e2 != nil {
+			reply(w, fmt.Errorf("bad layout"))
+			return
+		}
+		a.kvmSetLayout(x, y)
 		reply(w, nil)
 	})
 	mux.HandleFunc("/api/input", func(w http.ResponseWriter, r *http.Request) {
@@ -381,9 +390,6 @@ func (u *ui) handler() http.Handler {
 			a.sendInput(evs)
 		}
 		w.WriteHeader(204)
-	})
-	mux.HandleFunc("/api/vmon/install", func(w http.ResponseWriter, r *http.Request) {
-		reply(w, installDisplay())
 	})
 	mux.HandleFunc("/api/send", func(w http.ResponseWriter, r *http.Request) {
 		name := filepath.Base(r.URL.Query().Get("name"))

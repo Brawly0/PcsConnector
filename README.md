@@ -15,8 +15,7 @@ Move your PC's mouse off the edge of the screen and it carries on onto the lapto
 
 | | |
 |---|---|
-| 🖱️ **Mouse & keyboard sharing** | Push the mouse off the edge of your PC screen and it moves onto the laptop. Everything you type goes there too. Works like Input Leap or Synergy, without the setup. **Scroll Lock** switches back and forth. |
-| 🖥️ **Extended screen** | Turn the laptop into a second Windows monitor, streamed over your network. Good for documents, chat and reference. |
+| 🖱️ **Mouse & keyboard sharing** | Push the mouse off the edge of your PC screen and it moves onto the laptop. Drag the laptop to wherever it sits on your desk: left, right, above or below any of your screens. Everything you type goes there too. Works like Input Leap or Synergy, without the setup. **Scroll Lock** switches back and forth. |
 | 📋 **Shared clipboard** | Copy on one computer, paste on the other. |
 | 📁 **File transfer** | Drop files into the window and they appear on the other computer. |
 
@@ -65,13 +64,13 @@ The laptop finds the PC on your network by itself, so there are no IP addresses 
 
 Both windows turn green. From now on the two computers reconnect by themselves, even after a restart.
 
-In the PC window, choose whether the laptop sits to the **left** or **right** of your screen. Then move the mouse off that edge.
+In the PC window, drag the laptop to where it sits next to your screens. Then move the mouse off that edge.
 
 </td>
 <td valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-windows-dark.png">
-  <img src="docs/images/app-windows.png" alt="The connected PC window: mouse and keyboard sharing with a left/right picker, extended screen, clipboard and files">
+  <img src="docs/images/app-windows.png" alt="The connected PC window: a screen layout with the laptop next to the PC's screens, clipboard and files">
 </picture>
 </td>
 </tr>
@@ -81,8 +80,7 @@ In the PC window, choose whether the laptop sits to the **left** or **right** of
 
 ## Using it
 
-- **Mouse & keyboard:** move off the edge you picked to go to the laptop, and back to return. **Scroll Lock** jumps between them. While you're on the laptop, the PC's cursor hides. You can't cross while holding a mouse button, so dragging near the edge is safe.
-- **Extended screen:** press **Set up virtual monitor** once (Windows asks permission), then **Start extended screen**. The laptop shows the new monitor fullscreen. Arrange it in *Windows Settings → Display*. Expect a short delay: it's great for documents, not for games.
+- **Mouse & keyboard:** move off the edge where the laptop touches your screens (highlighted in the layout) to go to the laptop, and back to return. **Scroll Lock** jumps between them. While you're on the laptop, the PC's cursor hides. You can't cross while holding a mouse button, so dragging near the edge is safe.
 - **Clipboard:** on by default; switch it off in the window.
 - **Files:** drop files into the window, or use *choose files*. They arrive in the other computer's `PcsConnector/Inbox` folder.
 - **Start at login** (bottom of the window): keep it on so a restart reconnects by itself.
@@ -95,7 +93,7 @@ In the PC window, choose whether the laptop sits to the **left** or **right** of
 | Problem | What to do |
 |---|---|
 | The laptop says *"Looking for your PC…"* and never connects | Check that PcsConnector is open on the PC with the same code and that both are on the same network. If Windows asked about the firewall, it must be allowed. On a VPN, enter the PC's address instead. |
-| The mouse doesn't move onto the laptop | Open the PcsConnector window on the laptop once after it starts (that's how the PC learns the laptop's screen size). Check the left/right setting on the PC. On the laptop, `pcsc doctor` should report `/dev/uinput writable`; if not, run the installer again. |
+| The mouse doesn't move onto the laptop | Open the PcsConnector window on the laptop once after it starts (that's how the PC learns the laptop's screen size). Check where the laptop sits in the layout on the PC. On the laptop, `pcsc doctor` should report `/dev/uinput writable`; if not, run the installer again. |
 | The PC window says *"slow path"* | The laptop's firewall blocks UDP 24800: run `sudo ufw allow 24800/udp` on the laptop. |
 | The clipboard doesn't sync | Run `pcsc doctor` on the laptop. It needs `wl-clipboard` (Wayland) or `xclip` (X11), which the installer adds. |
 
@@ -119,10 +117,6 @@ The window's **Activity log** usually says what's wrong. On the laptop there's a
 You need [Go](https://go.dev/dl/) 1.27 or newer. On Windows run `./build.ps1`. It puts everything in `dist/`: the Windows app, a console build (`pcsc.exe`), the Linux binaries (amd64, arm64), `install.sh`, and an offline Ubuntu bundle. Run `go test ./...` for the tests.
 
 There's also a command line: `pcsc host`, `pcsc join [address] --token CODE`, `pcsc doctor`, `pcsc version`. See [docs/SETUP.md](docs/SETUP.md) for manual installs and uninstalling, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it works.
-
-## Credits
-
-The extended screen uses the [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver) by MikeTheTech and contributors (MIT), bundled and installed with one click.
 
 ## License
 
